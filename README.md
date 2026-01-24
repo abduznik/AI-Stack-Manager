@@ -2,7 +2,7 @@
 
 A centralized Web UI to manage your AI-powered GitHub tools. This dashboard wraps your existing PowerShell scripts into a Dockerized environment, allowing you to run them from any browser on your network.
 
-## 🚀 Quick Start (Homelab)
+## Quick Start (Homelab)
 
 1. **Clone your script repositories** into a folder on your server:
    - `AI-Gen-Description`
@@ -21,7 +21,7 @@ A centralized Web UI to manage your AI-powered GitHub tools. This dashboard wrap
 
 ---
 
-## 🔑 Authentication Setup
+## Authentication Setup
 
 To use these tools, you need to provide API keys in the **Auth Settings** section of the dashboard.
 
@@ -44,7 +44,7 @@ We recommend using a **Fine-Grained Token** for better security than a classic P
 
 ---
 
-## 🛠️ How it Works
+## How it Works
 This project mounts your local `.ps1` files as volumes. When you execute a tool:
 1. The backend (FastAPI) spawns a PowerShell Core (`pwsh`) process inside the container.
 2. It dot-sources your script and calls the corresponding function.
