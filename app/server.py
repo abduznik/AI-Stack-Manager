@@ -51,7 +51,7 @@ async def save_settings(
         os.environ["GEMINI_API_KEY"] = cleaned_key
         msg.append("Gemini API Key Saved.")
 
-    return HTMLResponse(content=f"<div class='p-4 bg-green-900 text-green-100 rounded">{'<br>'.join(msg)}</div>")
+    return HTMLResponse(content=f"<div class='p-4 bg-green-900 text-green-100 rounded'>{'<br>'.join(msg)}</div>")
 
 @app.websocket("/ws/run/{tool_name}")
 async def websocket_endpoint(websocket: WebSocket, tool_name: str):
