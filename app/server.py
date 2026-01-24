@@ -51,7 +51,7 @@ async def save_settings(
         os.environ["GEMINI_API_KEY"] = cleaned_key
         msg.append("Gemini API Key Saved.")
 
-    return HTMLResponse(content=f"<div class='p-4 bg-green-900 text-green-100 rounded'>{'<br>'.join(msg)}</div>")
+    return HTMLResponse(content=f"<div class='p-4 bg-green-900 text-green-100 rounded">{'<br>'.join(msg)}</div>")
 
 @app.websocket("/ws/run/{tool_name}")
 async def websocket_endpoint(websocket: WebSocket, tool_name: str):
@@ -77,14 +77,12 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         # PowerShell execution string: dot-source script then call function
         ps_command = f". '{target['path']}'; {target['func']}"
         
-        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...
-")
+        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}..\n")
         
         env = os.environ.copy()
         if APP_STATE["GH_TOKEN"]:
             env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
         
-        # Verify key presence for debugging
         if APP_STATE["GEMINI_API_KEY"]:
             env["GEMINI_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
             masked_key = APP_STATE["GEMINI_API_KEY"][:4] + "..." + APP_STATE["GEMINI_API_KEY"][-4:]
@@ -107,12 +105,6 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             process.stdin.flush()
             process.stdin.close()
 
-        # Stream output line by line
-        # We need a non-blocking read to allow checking for websocket disconnects, 
-        # but standard 'for line in stdout' blocks.
-        # Instead, we run the blocking read in a thread executor or just risk it blocking briefly.
-        # For simplicity in this stack, we stick to the loop but wrap in try/finally to kill process.
-        
         for line in process.stdout:
             await websocket.send_text(line)
             
@@ -120,18 +112,14 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         await websocket.send_text(f"\n[SYSTEM] Finished with Exit Code: {process.returncode}")
         
     except WebSocketDisconnect:
-        # Expected when user clicks Stop or closes tab
         print("Websocket disconnected, killing process...")
     except Exception as e:
-        # Try to send error if socket is still open
         try:
             await websocket.send_text(f"\n[ERROR] {str(e)}")
         except:
             pass
     finally:
-        # ENSURE PROCESS IS KILLED
         if 'process' in locals() and process.poll() is None:
-            print(f"Terminating process for {tool_name}...")
             process.terminate()
             try:
                 process.wait(timeout=2)
