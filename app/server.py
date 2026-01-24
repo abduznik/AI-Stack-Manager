@@ -56,6 +56,9 @@ async def save_settings(
         os.environ["GOOGLE_API_KEY"] = cleaned_key
         msg.append("Gemini API Key Saved.")
 
+    if cleaned_key:
+        print("DEBUG: Gemini API Key set (length: " + str(len(cleaned_key)) + ")")
+    
     html_msg = "<br>".join(msg)
     response_html = "<div class='p-4 bg-green-900 text-green-100 rounded'>" + html_msg + "</div>"
     return HTMLResponse(content=response_html)
