@@ -1,14 +1,14 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 1. Install Dependencies
+# Removed software-properties-common to fix build error
 RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
     apt-transport-https \
     git \
-    software-properties-common \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
@@ -20,7 +20,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 RUN npm install -g @google/gemini-cli
 
 # 4. Install PowerShell (pwsh)
-RUN wget -q "https://packages.microsoft.com/config/debian/11/packages-microsoft-prod.deb" \
+# Update to Debian 12 (Bookworm) repo
+RUN wget -q "https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb" \
     && dpkg -i packages-microsoft-prod.deb \
     && apt-get update \
     && apt-get install -y powershell
