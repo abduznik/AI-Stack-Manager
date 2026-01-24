@@ -124,7 +124,10 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         if target_repo:
             await websocket.send_text("[SYSTEM] Switching context to " + target_repo + "...\n")
             repo_slug = target_repo.replace("https://github.com/", "").replace(".git", "")
+            
+            # REVERTED: We keep the original folder name even if it has hyphens
             safe_name = repo_slug.split("/")[-1]
+            
             workspace_path = "/app/workspace/" + safe_name
             if not os.path.exists(workspace_path):
                 os.makedirs(workspace_path, exist_ok=True)
@@ -135,13 +138,6 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         
         ps_command = ". '" + target['path'] + "'; " + target['func']
         
-        # --- FIX: SANITIZE INPUT ---
-        # Parentheses in the input are breaking the shell wrapper chain or 
-        # triggering CLI parsing errors. We strip them to ensure stability.
-        if user_input:
-            user_input = user_input.replace("(", "").replace(")", "")
-        # ---------------------------
-
         await websocket.send_text("[SYSTEM] Initializing " + tool_name + "...\n")
         
         process = subprocess.Popen(
