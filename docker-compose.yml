@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  ai-manager:
+    build: .
+    ports:
+      - "8090:8090"
+    volumes:
+      # These paths match your host file structure
+      - ../AI-Gen-Description:/scripts/AI-Gen-Description
+      - ../AI-Gen-Issue:/scripts/AI-Gen-Issue
+      - ../AI-Gen-Profile:/scripts/AI-Gen-Profile
+      - ../AI-Gen-Topics:/scripts/AI-Gen-Topics
+    environment:
+      # Optional: Pre-fill if you have them in your host shell
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GH_TOKEN=${GH_TOKEN}
+    restart: unless-stopped

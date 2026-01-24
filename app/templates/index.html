@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Stack Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <style>
+        .terminal-window {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0d1117; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans min-h-screen p-8">
+
+    <div class="max-w-6xl mx-auto grid grid-cols-12 gap-6">
+        <div class="col-span-3 space-y-4">
+            <h1 class="text-2xl font-bold text-blue-400 mb-6 underline decoration-blue-600/30">AI Stack</h1>
+            
+            <div class="space-y-2">
+                <button onclick="selectTool('gen-desc')" class="w-full text-left p-3 rounded hover:bg-gray-800 transition border border-gray-700 focus:ring-2 ring-blue-500 outline-none">
+                    <div class="font-bold">Descriptions</div>
+                    <div class="text-xs text-gray-500">AI-Gen-Description</div>
+                </button>
+                <button onclick="selectTool('gen-topics')" class="w-full text-left p-3 rounded hover:bg-gray-800 transition border border-gray-700 focus:ring-2 ring-blue-500 outline-none">
+                    <div class="font-bold">Topics</div>
+                    <div class="text-xs text-gray-500">AI-Gen-Topics</div>
+                </button>
+                <button onclick="selectTool('gen-issue')" class="w-full text-left p-3 rounded hover:bg-gray-800 transition border border-gray-700 focus:ring-2 ring-blue-500 outline-none">
+                    <div class="font-bold">Issues</div>
+                    <div class="text-xs text-gray-500">AI-Gen-Issue</div>
+                </button>
+                <button onclick="selectTool('gen-profile')" class="w-full text-left p-3 rounded hover:bg-gray-800 transition border border-gray-700 focus:ring-2 ring-blue-500 outline-none">
+                    <div class="font-bold">Profile</div>
+                    <div class="text-xs text-gray-500">AI-Gen-Profile</div>
+                </button>
+            </div>
+
+            <div class="mt-8 p-4 bg-gray-800 rounded border border-gray-700">
+                <h3 class="font-bold mb-3 text-sm text-gray-400 uppercase tracking-wider">Auth Settings</h3>
+                <form hx-post="/settings" hx-swap="innerHTML" hx-target="#settings-status">
+                    <input type="password" name="gh_token" placeholder="GitHub Token" class="w-full mb-2 p-2 bg-gray-900 border border-gray-600 rounded text-sm focus:border-blue-500 outline-none">
+                    <input type="password" name="gemini_key" placeholder="Gemini API Key" class="w-full mb-3 p-2 bg-gray-900 border border-gray-600 rounded text-sm focus:border-blue-500 outline-none">
+                    <button type="submit" class="w-full bg-blue-700 hover:bg-blue-600 text-white p-2 rounded text-sm font-bold transition">Update Keys</button>
+                </form>
+                <div id="settings-status" class="mt-2 text-xs"></div>
+            </div>
+        </div>
+
+        <div class="col-span-9 space-y-6">
+            <div id="controls-area" class="p-6 bg-gray-800 rounded border border-gray-700">
+                <h2 id="tool-title" class="text-xl font-bold mb-4">Select Tool</h2>
+                <div id="tool-inputs" class="space-y-4"></div>
+                <button id="run-btn" onclick="runTool()" class="mt-4 px-8 py-3 bg-green-700 hover:bg-green-600 rounded font-bold hidden transition flex items-center gap-2">
+                    <span>Execute Script</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="rounded border border-gray-700 overflow-hidden shadow-2xl">
+                <div class="bg-gray-800 px-4 py-2 text-xs font-mono text-gray-400 border-b border-gray-700 flex justify-between items-center">
+                    <span>CONSOLE_OUTPUT</span>
+                    <button onclick="clearTerminal()" class="hover:text-white px-2 py-1 bg-gray-700 rounded transition">Clear</button>
+                </div>
+                <div id="terminal" class="terminal-window p-4 text-sm"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTool = null;
+        let ws = null;
+
+        const toolConfig = {
+            'gen-desc': { title: 'Update Descriptions', inputs: [] },
+            'gen-topics': { title: 'Optimize Topics', inputs: [] },
+            'gen-issue': { 
+                title: 'Draft Issues', 
+                inputs: [{ type: 'textarea', id: 'input-data', placeholder: 'Enter your idea (e.g., Add a dark mode toggle to the dashboard)' }] 
+            },
+            'gen-profile': { 
+                title: 'Refresh Profile README', 
+                inputs: [{ type: 'select', id: 'input-data', label: 'Create Pull Request?', options: [{val: 'y', text: 'Yes, Open PR'}, {val: 'n', text: 'No, Just Save Draft'}] }]
+            }
+        };
+
+        function selectTool(name) {
+            currentTool = name;
+            const config = toolConfig[name];
+            document.getElementById('tool-title').innerText = config.title;
+            const inputContainer = document.getElementById('tool-inputs');
+            inputContainer.innerHTML = '';
+            
+            config.inputs.forEach(inp => {
+                if (inp.type === 'textarea') {
+                    inputContainer.innerHTML += `<textarea id="${inp.id}" class="w-full h-32 bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none" placeholder="${inp.placeholder}"></textarea>`;
+                } else if (inp.type === 'select') {
+                    let opts = inp.options.map(o => `<option value="${o.val}">${o.text}</option>`).join('');
+                    inputContainer.innerHTML += `<div class="text-sm text-gray-400 mb-1">${inp.label}</div><select id="${inp.id}" class="w-full bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none">${opts}</select>`;
+                }
+            });
+            document.getElementById('run-btn').classList.remove('hidden');
+        }
+
+        function runTool() {
+            if (!currentTool) return;
+            const terminal = document.getElementById('terminal');
+            terminal.innerHTML += `\n<span class="text-blue-400">[WEB] Connecting to WebSocket for ${currentTool}...</span>\n`;
+
+            if (ws) ws.close();
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(`${protocol}://${window.location.host}/ws/run/${currentTool}`);
+
+            ws.onopen = () => {
+                let payload = { input: "" };
+                const inputEl = document.getElementById('input-data');
+                if (inputEl) payload.input = inputEl.value;
+                ws.send(JSON.stringify(payload));
+            };
+
+            ws.onmessage = (event) => {
+                const span = document.createElement('span');
+                span.innerText = event.data;
+                // Auto-color common patterns
+                if (event.data.includes('[ANALYZING]')) span.className = 'text-white font-bold';
+                if (event.data.includes('Done!')) span.className = 'text-cyan-400 font-bold';
+                if (event.data.includes('SUCCESS!')) span.className = 'text-magenta-400 font-bold';
+                
+                terminal.appendChild(span);
+                terminal.scrollTop = terminal.scrollHeight;
+            };
+
+            ws.onclose = () => {
+                terminal.innerHTML += '<span class="text-gray-500">\n[WEB] Disconnected.</span>\n';
+            };
+        }
+
+        function clearTerminal() { document.getElementById('terminal').innerHTML = ''; }
+    </script>
+</body>
+</html>
