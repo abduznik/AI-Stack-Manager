@@ -1,9 +1,9 @@
 FROM python:3.11-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV GH_PROMPT_DISABLED=1
 
 # 1. Install Dependencies
-# Removed software-properties-common to fix build error
 RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Install Node.js (for @google/gemini-cli)
+# 2. Install Node.js
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs
 
@@ -20,7 +20,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 RUN npm install -g @google/gemini-cli
 
 # 4. Install PowerShell (pwsh)
-# Update to Debian 12 (Bookworm) repo
 RUN wget -q "https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb" \
     && dpkg -i packages-microsoft-prod.deb \
     && apt-get update \
@@ -28,8 +27,11 @@ RUN wget -q "https://packages.microsoft.com/config/debian/12/packages-microsoft-
 
 RUN apt-get update && apt-get install -y gh
 
-# 5.5 Compatibility Wrapper for Windows Scripts (cmd /c)
-RUN echo '#!/bin/bash\nif [ "$1" = "/c" ]; then shift; fi\neval "$@"' > /usr/local/bin/cmd \
+# 5. Compatibility Wrapper for Windows Scripts (cmd /c)
+# Improved version: handles /c safely and executes the rest as a shell command
+RUN printf '#!/bin/bash
+if [ "$1" == "/c" ]; then shift; fi
+exec bash -c "$*"' > /usr/local/bin/cmd \
     && chmod +x /usr/local/bin/cmd
 
 WORKDIR /app
