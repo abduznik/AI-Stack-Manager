@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  ai-manager:
+    image: ghcr.io/abduznik/ai-stack-manager:latest
+    container_name: ai-stack-manager
+    ports:
+      - "8090:8090"
+    volumes:
+      # Use a named volume to persist the scripts inside the container
+      - ai_scripts_data:/scripts
+      # Optional: Persist auth config
+      # - ai_config_data:/app/data
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GH_TOKEN=${GH_TOKEN}
+    restart: unless-stopped
+
+volumes:
+  ai_scripts_data:
