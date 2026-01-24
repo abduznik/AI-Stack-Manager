@@ -78,8 +78,8 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         # PowerShell execution string: dot-source script then call function
         ps_command = f". '{target['path']}'; {target['func']}"
         
-        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...
-")
+        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...")
+        await websocket.send_text("\n")
         
         env = os.environ.copy()
         if APP_STATE["GH_TOKEN"]:
@@ -88,11 +88,9 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         if APP_STATE["GEMINI_API_KEY"]:
             env["GEMINI_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
             masked_key = APP_STATE["GEMINI_API_KEY"][:4] + "..." + APP_STATE["GEMINI_API_KEY"][-4:]
-            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked_key}
-")
+            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked_key}\n")
         else:
-            await websocket.send_text(f"[WARN] No Gemini Key found in settings!
-")
+            await websocket.send_text(f"[WARN] No Gemini Key found in settings!\n")
 
         process = subprocess.Popen(
             ["pwsh", "-NoProfile", "-Command", ps_command],
