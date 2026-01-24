@@ -28,11 +28,10 @@ RUN wget -q "https://packages.microsoft.com/config/debian/12/packages-microsoft-
 RUN apt-get update && apt-get install -y gh
 
 # 5. Compatibility Wrapper for Windows Scripts (cmd /c)
-# Improved version: handles /c safely and executes the rest as a shell command
-RUN printf '#!/bin/bash
-if [ "$1" == "/c" ]; then shift; fi
-exec bash -c "$*"' > /usr/local/bin/cmd \
-    && chmod +x /usr/local/bin/cmd
+RUN echo '#!/bin/bash' > /usr/local/bin/cmd && \
+    echo 'if [ "$1" = "/c" ]; then shift; fi' >> /usr/local/bin/cmd && \
+    echo 'exec bash -c "$*"' >> /usr/local/bin/cmd && \
+    chmod +x /usr/local/bin/cmd
 
 WORKDIR /app
 COPY requirements.txt .
