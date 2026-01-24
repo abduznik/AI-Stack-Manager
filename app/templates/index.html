@@ -18,7 +18,6 @@
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #0d1117; }
         ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
-        /* Link styling for terminal */
         .term-link { color: #58a6ff; text-decoration: underline; cursor: pointer; }
         .term-link:hover { color: #79c0ff; }
     </style>
@@ -63,10 +62,15 @@
             <div id="controls-area" class="p-6 bg-gray-800 rounded border border-gray-700">
                 <h2 id="tool-title" class="text-xl font-bold mb-4">Select Tool</h2>
                 
-                <!-- NEW: Repo Selector for Tools -->
+                <!-- NEW: Repo Selector Dropdown -->
                 <div id="repo-selector" class="hidden mb-4">
-                    <label class="text-sm text-gray-400 mb-1 block">Target Repository (owner/repo)</label>
-                    <input type="text" id="target-repo" placeholder="e.g. abduznik/my-project" class="w-full bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none font-mono">
+                    <label class="text-sm text-gray-400 mb-1 block">Target Repository</label>
+                    <div class="flex gap-2">
+                        <select id="target-repo" class="w-full bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none font-mono">
+                            <option value="">Select a repository...</option>
+                        </select>
+                        <button onclick="loadRepos()" class="px-3 bg-gray-700 rounded hover:bg-gray-600 text-sm">↻</button>
+                    </div>
                 </div>
 
                 <div id="tool-inputs" class="space-y-4"></div>
@@ -103,13 +107,13 @@
             'gen-topics': { title: 'Optimize Topics', inputs: [], needsRepo: false },
             'gen-issue': { 
                 title: 'Draft Issues', 
-                needsRepo: true, // Needs Target Repo
+                needsRepo: true, 
                 inputs: [{ type: 'textarea', id: 'input-data', placeholder: 'Enter your idea (e.g., Add a dark mode toggle to the dashboard)' }] 
             },
             'gen-profile': { 
                 title: 'Refresh Profile README', 
                 needsRepo: false,
-                inputs: [{ type: 'select', id: 'input-data', label: 'Create Pull Request?', options: [{val: 'y', text: 'Yes, Open PR'}, {val: 'n', text: 'No, Just Save Draft'}] }] 
+                inputs: [{ type: 'select', id: 'input-data', label: 'Create Pull Request?', options: [{val: 'y', text: 'Yes, Open PR'}, {val: 'n', text: 'No, Just Save Draft'}] }]
             }
         };
 
@@ -120,13 +124,15 @@
             const inputContainer = document.getElementById('tool-inputs');
             inputContainer.innerHTML = '';
 
-            // Toggle Repo Selector
             const repoBox = document.getElementById('repo-selector');
             if (config.needsRepo) {
                 repoBox.classList.remove('hidden');
+                // Auto-load repos if empty
+                if(document.getElementById('target-repo').options.length <= 1) {
+                    loadRepos();
+                }
             } else {
                 repoBox.classList.add('hidden');
-                document.getElementById('target-repo').value = ''; // clear it
             }
             
             config.inputs.forEach(inp => {
@@ -138,6 +144,24 @@
                 }
             });
             document.getElementById('run-btn').classList.remove('hidden');
+        }
+
+        async function loadRepos() {
+            const select = document.getElementById('target-repo');
+            select.innerHTML = '<option>Loading...</option>';
+            try {
+                const res = await fetch('/api/repos');
+                const repos = await res.json();
+                select.innerHTML = '<option value="">Select a repository...</option>';
+                repos.forEach(repo => {
+                    const opt = document.createElement('option');
+                    opt.value = repo;
+                    opt.innerText = repo;
+                    select.appendChild(opt);
+                });
+            } catch (e) {
+                select.innerHTML = '<option>Error loading repos</option>';
+            }
         }
 
         function runTool() {
@@ -158,9 +182,9 @@
                 const inputEl = document.getElementById('input-data');
                 if (inputEl) payload.input = inputEl.value;
 
-                // Grab repo if visible
+                // Grab repo from dropdown
                 const repoEl = document.getElementById('target-repo');
-                if (!repoEl.parentElement.classList.contains('hidden')) {
+                if (!repoEl.parentElement.parentElement.classList.contains('hidden')) {
                     payload.repo = repoEl.value;
                 }
 
@@ -170,11 +194,9 @@
             ws.onmessage = (event) => {
                 const span = document.createElement('span');
                 
-                // Parse Links (Simple Regex for URL)
                 let text = event.data;
-                const urlRegex = /(https?:\[^\s]+)/g;
+                const urlRegex = /(https?:\/\/[^\s]+)/g;
                 if (urlRegex.test(text)) {
-                    // Replace URL with clickable link
                     const parts = text.split(urlRegex);
                     span.innerHTML = parts.map(part => {
                         if (part.match(urlRegex)) {
@@ -186,7 +208,6 @@
                     span.innerText = text;
                 }
 
-                // Auto-color
                 if (text.includes('[ANALYZING]')) span.className = 'text-white font-bold';
                 if (text.includes('Done!')) span.className = 'text-cyan-400 font-bold';
                 if (text.includes('[SYSTEM]')) span.className = 'text-yellow-500';

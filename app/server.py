@@ -4,7 +4,7 @@ import asyncio
 import json
 import shutil
 from fastapi import FastAPI, Request, WebSocket, Form, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -52,7 +52,25 @@ async def save_settings(
         os.environ["GEMINI_API_KEY"] = cleaned_key
         msg.append("Gemini API Key Saved.")
 
-    return HTMLResponse(content=f"<div class='p-4 bg-green-900 text-green-100 rounded">{'<br>'.join(msg)}</div>")
+    # Fixed Syntax Error using triple quotes
+    return HTMLResponse(content=f"""<div class='p-4 bg-green-900 text-green-100 rounded">{'<br>'.join(msg)}</div>""")
+
+@app.get("/api/repos")
+async def get_repos():
+    """Fetches list of repositories for the authenticated user"""
+    if not APP_STATE["GH_TOKEN"]:
+        return JSONResponse([])
+    
+    try:
+        # Fetch up to 100 repos, sorted by update time
+        cmd = ["gh", "repo", "list", "--limit", "100", "--json", "nameWithOwner", "--order", "desc", "--sort", "updated"]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        repos = json.loads(result.stdout)
+        # Return just a list of strings "owner/repo"
+        return JSONResponse([r["nameWithOwner"] for r in repos])
+    except Exception as e:
+        print(f"Error fetching repos: {e}")
+        return JSONResponse([])
 
 @app.websocket("/ws/run/{tool_name}")
 async def websocket_endpoint(websocket: WebSocket, tool_name: str):
@@ -80,20 +98,17 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         # Determine Working Directory
         working_dir = None
         if target_repo:
-            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...
-")
+            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...\n")
             repo_slug = target_repo.replace("https://github.com/", "").replace(".git", "")
             safe_name = repo_slug.split("/")[-1]
             workspace_path = f"/app/workspace/{safe_name}"
             
             if not os.path.exists(workspace_path):
                 os.makedirs(workspace_path, exist_ok=True)
-                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...
-")
+                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...\n")
                 subprocess.run(["gh", "repo", "clone", repo_slug, "."], cwd=workspace_path, check=False)
             else:
-                await websocket.send_text(f"[SYSTEM] Pulling latest changes...
-")
+                await websocket.send_text(f"[SYSTEM] Pulling latest changes...\n")
                 subprocess.run(["git", "pull"], cwd=workspace_path, check=False)
             
             working_dir = workspace_path
@@ -121,7 +136,7 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             text=True,
             bufsize=1,
             env=env,
-            cwd=working_dir # Set the working directory to the cloned repo
+            cwd=working_dir
         )
 
         if user_input and process.stdin:
