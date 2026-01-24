@@ -16,7 +16,7 @@ if not os.path.exists("app/static"):
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
-# Internal state (reset on container restart)
+# Internal state
 APP_STATE = {
     "GH_TOKEN": os.getenv("GH_TOKEN", ""),
     "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY", "")
@@ -37,50 +37,44 @@ async def save_settings(
 ):
     msg = []
     if gh_token:
-        token_clean = gh_token.strip()
+        token_clean = gh_token.strip().replace('"', '').replace("'", "")
         APP_STATE["GH_TOKEN"] = token_clean
         os.environ["GH_TOKEN"] = token_clean
-        
         try:
+            # Re-auth GH CLI
             process = subprocess.Popen(["gh", "auth", "login", "--with-token"], stdin=subprocess.PIPE, text=True)
             process.communicate(input=token_clean)
-            msg.append("GitHub Token Saved & Authenticated.")
+            msg.append("GitHub Token Saved.")
         except Exception as e:
-            msg.append("GitHub Auth Error: " + str(e))
+            msg.append("GH Auth Error: " + str(e))
             
     if gemini_key:
-        cleaned_key = gemini_key.strip()
+        cleaned_key = gemini_key.strip().replace('"', '').replace("'", "")
         APP_STATE["GEMINI_API_KEY"] = cleaned_key
+        # Set both variants just in case
         os.environ["GEMINI_API_KEY"] = cleaned_key
+        os.environ["GOOGLE_API_KEY"] = cleaned_key
         msg.append("Gemini API Key Saved.")
 
     html_msg = "<br>".join(msg)
-    response_html = "<div class='p-4 bg-green-900 text-green-100 rounded'>" + html_msg + "</div>"
+    response_html = "<div class='p-4 bg-green-900 text-green-100 rounded">" + html_msg + "</div>"
     return HTMLResponse(content=response_html)
 
 @app.get("/api/repos")
 async def get_repos():
     if not APP_STATE["GH_TOKEN"]:
         return JSONResponse([])
-    
     try:
         env = os.environ.copy()
         env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
-        env["GH_PROMPT_DISABLED"] = "1"
-        env["NO_COLOR"] = "1"
-
         cmd = ["gh", "repo", "list", "--limit", "100", "--json", "nameWithOwner,updatedAt"]
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
-        
         if result.returncode != 0:
-            print("GH Error: " + str(result.stderr))
             return JSONResponse([])
-            
         repos = json.loads(result.stdout)
         repos.sort(key=lambda x: x.get('updatedAt', ''), reverse=True)
         return JSONResponse([r["nameWithOwner"] for r in repos])
-    except Exception as e:
-        print("Exception fetching repos: " + str(e))
+    except Exception:
         return JSONResponse([])
 
 @app.websocket("/ws/run/{tool_name}")
@@ -96,7 +90,6 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
     
     target = script_map.get(tool_name)
     if not target:
-        await websocket.send_text("Error: Tool not found.")
         await websocket.close()
         return
 
@@ -111,6 +104,12 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
         if APP_STATE["GEMINI_API_KEY"]:
             env["GEMINI_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
+            env["GOOGLE_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
+        
+        # Suppress Node.js debug/TTY formatting
+        env["NODE_ENV"] = "production"
+        env["CI"] = "true"
+        env["TERM"] = "dumb"
 
         working_dir = None
         if target_repo:
@@ -118,25 +117,16 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             repo_slug = target_repo.replace("https://github.com/", "").replace(".git", "")
             safe_name = repo_slug.split("/")[-1]
             workspace_path = "/app/workspace/" + safe_name
-            
             if not os.path.exists(workspace_path):
                 os.makedirs(workspace_path, exist_ok=True)
-                await websocket.send_text("[SYSTEM] Cloning " + repo_slug + "...\n")
                 subprocess.run(["gh", "repo", "clone", repo_slug, "."], cwd=workspace_path, check=False, env=env)
             else:
-                await websocket.send_text("[SYSTEM] Pulling latest changes...\n")
                 subprocess.run(["git", "pull"], cwd=workspace_path, check=False, env=env)
-            
             working_dir = workspace_path
         
         ps_command = ". '" + target['path'] + "'; " + target['func']
         await websocket.send_text("[SYSTEM] Initializing " + tool_name + "...\n")
         
-        if "GEMINI_API_KEY" in env:
-            key = env["GEMINI_API_KEY"]
-            masked = key[:4] + "..." + key[-4:]
-            await websocket.send_text("[DEBUG] Using Gemini Key: " + masked + "\n")
-
         process = subprocess.Popen(
             ["pwsh", "-NoProfile", "-Command", ps_command],
             stdin=subprocess.PIPE if user_input else None,
