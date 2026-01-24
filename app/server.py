@@ -114,7 +114,6 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         target_repo = data.get("repo", "").strip()
         
         env = os.environ.copy()
-        # Ensure env vars are set
         if APP_STATE["GH_TOKEN"]:
             env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
         if APP_STATE["GEMINI_API_KEY"]:
@@ -122,32 +121,27 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
 
         working_dir = None
         if target_repo:
-            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...
-")
+            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...\n")
             repo_slug = target_repo.replace("https://github.com/", "").replace(".git", "")
             safe_name = repo_slug.split("/")[-1]
             workspace_path = f"/app/workspace/{safe_name}"
             
             if not os.path.exists(workspace_path):
                 os.makedirs(workspace_path, exist_ok=True)
-                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...
-")
+                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...\n")
                 subprocess.run(["gh", "repo", "clone", repo_slug, "."], cwd=workspace_path, check=False, env=env)
             else:
-                await websocket.send_text(f"[SYSTEM] Pulling latest changes...
-")
+                await websocket.send_text("[SYSTEM] Pulling latest changes...\n")
                 subprocess.run(["git", "pull"], cwd=workspace_path, check=False, env=env)
             
             working_dir = workspace_path
         
         ps_command = f". '{target['path']}'; {target['func']}"
-        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...
-")
+        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...\n")
         
         if "GEMINI_API_KEY" in env:
             masked = env["GEMINI_API_KEY"][:4] + "..." + env["GEMINI_API_KEY"][-4:]
-            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked}
-")
+            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked}\n")
 
         process = subprocess.Popen(
             ["pwsh", "-NoProfile", "-Command", ps_command],
