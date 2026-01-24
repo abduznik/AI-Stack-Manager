@@ -2,6 +2,7 @@ import os
 import subprocess
 import asyncio
 import json
+import shutil
 from fastapi import FastAPI, Request, WebSocket, Form, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -51,7 +52,7 @@ async def save_settings(
         os.environ["GEMINI_API_KEY"] = cleaned_key
         msg.append("Gemini API Key Saved.")
 
-    return HTMLResponse(content=f"""<div class='p-4 bg-green-900 text-green-100 rounded'>{'<br>'.join(msg)}</div>""")
+    return HTMLResponse(content=f"<div class='p-4 bg-green-900 text-green-100 rounded">{'<br>'.join(msg)}</div>")
 
 @app.websocket("/ws/run/{tool_name}")
 async def websocket_endpoint(websocket: WebSocket, tool_name: str):
@@ -74,8 +75,30 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
     try:
         data = await websocket.receive_json()
         user_input = data.get("input", "")
+        target_repo = data.get("repo", "").strip()
         
-        # PowerShell execution string: dot-source script then call function
+        # Determine Working Directory
+        working_dir = None
+        if target_repo:
+            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...
+")
+            repo_slug = target_repo.replace("https://github.com/", "").replace(".git", "")
+            safe_name = repo_slug.split("/")[-1]
+            workspace_path = f"/app/workspace/{safe_name}"
+            
+            if not os.path.exists(workspace_path):
+                os.makedirs(workspace_path, exist_ok=True)
+                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...
+")
+                subprocess.run(["gh", "repo", "clone", repo_slug, "."], cwd=workspace_path, check=False)
+            else:
+                await websocket.send_text(f"[SYSTEM] Pulling latest changes...
+")
+                subprocess.run(["git", "pull"], cwd=workspace_path, check=False)
+            
+            working_dir = workspace_path
+        
+        # PowerShell execution string
         ps_command = f". '{target['path']}'; {target['func']}"
         
         await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...")
@@ -89,8 +112,6 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             env["GEMINI_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
             masked_key = APP_STATE["GEMINI_API_KEY"][:4] + "..." + APP_STATE["GEMINI_API_KEY"][-4:]
             await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked_key}\n")
-        else:
-            await websocket.send_text(f"[WARN] No Gemini Key found in settings!\n")
 
         process = subprocess.Popen(
             ["pwsh", "-NoProfile", "-Command", ps_command],
@@ -99,7 +120,8 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
-            env=env
+            env=env,
+            cwd=working_dir # Set the working directory to the cloned repo
         )
 
         if user_input and process.stdin:

@@ -18,6 +18,9 @@
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #0d1117; }
         ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        /* Link styling for terminal */
+        .term-link { color: #58a6ff; text-decoration: underline; cursor: pointer; }
+        .term-link:hover { color: #79c0ff; }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans min-h-screen p-8">
@@ -59,7 +62,15 @@
         <div class="col-span-9 space-y-6">
             <div id="controls-area" class="p-6 bg-gray-800 rounded border border-gray-700">
                 <h2 id="tool-title" class="text-xl font-bold mb-4">Select Tool</h2>
+                
+                <!-- NEW: Repo Selector for Tools -->
+                <div id="repo-selector" class="hidden mb-4">
+                    <label class="text-sm text-gray-400 mb-1 block">Target Repository (owner/repo)</label>
+                    <input type="text" id="target-repo" placeholder="e.g. abduznik/my-project" class="w-full bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none font-mono">
+                </div>
+
                 <div id="tool-inputs" class="space-y-4"></div>
+                
                 <button id="run-btn" onclick="runTool()" class="mt-4 px-8 py-3 bg-green-700 hover:bg-green-600 rounded font-bold hidden transition flex items-center gap-2">
                     <span>Execute Script</span>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -88,14 +99,16 @@
         let ws = null;
 
         const toolConfig = {
-            'gen-desc': { title: 'Update Descriptions', inputs: [] },
-            'gen-topics': { title: 'Optimize Topics', inputs: [] },
+            'gen-desc': { title: 'Update Descriptions', inputs: [], needsRepo: false },
+            'gen-topics': { title: 'Optimize Topics', inputs: [], needsRepo: false },
             'gen-issue': { 
                 title: 'Draft Issues', 
+                needsRepo: true, // Needs Target Repo
                 inputs: [{ type: 'textarea', id: 'input-data', placeholder: 'Enter your idea (e.g., Add a dark mode toggle to the dashboard)' }] 
             },
             'gen-profile': { 
                 title: 'Refresh Profile README', 
+                needsRepo: false,
                 inputs: [{ type: 'select', id: 'input-data', label: 'Create Pull Request?', options: [{val: 'y', text: 'Yes, Open PR'}, {val: 'n', text: 'No, Just Save Draft'}] }] 
             }
         };
@@ -106,6 +119,15 @@
             document.getElementById('tool-title').innerText = config.title;
             const inputContainer = document.getElementById('tool-inputs');
             inputContainer.innerHTML = '';
+
+            // Toggle Repo Selector
+            const repoBox = document.getElementById('repo-selector');
+            if (config.needsRepo) {
+                repoBox.classList.remove('hidden');
+            } else {
+                repoBox.classList.add('hidden');
+                document.getElementById('target-repo').value = ''; // clear it
+            }
             
             config.inputs.forEach(inp => {
                 if (inp.type === 'textarea') {
@@ -130,23 +152,45 @@
             ws = new WebSocket(`${protocol}://${window.location.host}/ws/run/${currentTool}`);
 
             ws.onopen = () => {
-                stopBtn.classList.remove('hidden'); // Show Stop Button
+                stopBtn.classList.remove('hidden');
                 
-                let payload = { input: "" };
+                let payload = { input: "", repo: "" };
                 const inputEl = document.getElementById('input-data');
                 if (inputEl) payload.input = inputEl.value;
+
+                // Grab repo if visible
+                const repoEl = document.getElementById('target-repo');
+                if (!repoEl.parentElement.classList.contains('hidden')) {
+                    payload.repo = repoEl.value;
+                }
+
                 ws.send(JSON.stringify(payload));
             };
 
             ws.onmessage = (event) => {
                 const span = document.createElement('span');
-                span.innerText = event.data;
-                // Auto-color common patterns
-                if (event.data.includes('[ANALYZING]')) span.className = 'text-white font-bold';
-                if (event.data.includes('Done!')) span.className = 'text-cyan-400 font-bold';
-                if (event.data.includes('SUCCESS!')) span.className = 'text-magenta-400 font-bold';
-                if (event.data.includes('[DEBUG]')) span.className = 'text-gray-500 italic';
-                if (event.data.includes('[ERROR]')) span.className = 'text-red-500 font-bold';
+                
+                // Parse Links (Simple Regex for URL)
+                let text = event.data;
+                const urlRegex = /(https?:\[^\s]+)/g;
+                if (urlRegex.test(text)) {
+                    // Replace URL with clickable link
+                    const parts = text.split(urlRegex);
+                    span.innerHTML = parts.map(part => {
+                        if (part.match(urlRegex)) {
+                            return `<a href="${part}" target="_blank" class="term-link">${part}</a>`;
+                        }
+                        return part;
+                    }).join('');
+                } else {
+                    span.innerText = text;
+                }
+
+                // Auto-color
+                if (text.includes('[ANALYZING]')) span.className = 'text-white font-bold';
+                if (text.includes('Done!')) span.className = 'text-cyan-400 font-bold';
+                if (text.includes('[SYSTEM]')) span.className = 'text-yellow-500';
+                if (text.includes('[ERROR]')) span.className = 'text-red-500 font-bold';
                 
                 terminal.appendChild(span);
                 terminal.scrollTop = terminal.scrollHeight;
@@ -154,13 +198,13 @@
 
             ws.onclose = () => {
                 terminal.innerHTML += '<span class="text-gray-500">\n[WEB] Disconnected.</span>\n';
-                stopBtn.classList.add('hidden'); // Hide Stop Button
+                stopBtn.classList.add('hidden');
             };
         }
         
         function stopTool() {
             if (ws) {
-                ws.close(); // This triggers the backend 'WebSocketDisconnect' exception
+                ws.close();
                 const terminal = document.getElementById('terminal');
                 terminal.innerHTML += '<span class="text-red-400">\n[WEB] STOP REQUESTED BY USER.</span>\n';
             }
