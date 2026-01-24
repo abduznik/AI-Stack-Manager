@@ -55,7 +55,7 @@ async def save_settings(
         msg.append("Gemini API Key Saved.")
 
     html_msg = "<br>".join(msg)
-    response_html = "<div class='p-4 bg-green-900 text-green-100 rounded">" + html_msg + "</div>"
+    response_html = "<div class='p-4 bg-green-900 text-green-100 rounded'>" + html_msg + "</div>"
     return HTMLResponse(content=response_html)
 
 @app.get("/api/repos")
