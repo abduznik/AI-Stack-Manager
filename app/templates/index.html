@@ -71,7 +71,12 @@
             <div class="rounded border border-gray-700 overflow-hidden shadow-2xl">
                 <div class="bg-gray-800 px-4 py-2 text-xs font-mono text-gray-400 border-b border-gray-700 flex justify-between items-center">
                     <span>CONSOLE_OUTPUT</span>
-                    <button onclick="clearTerminal()" class="hover:text-white px-2 py-1 bg-gray-700 rounded transition">Clear</button>
+                    <div class="flex gap-2">
+                         <button onclick="stopTool()" id="stop-btn" class="hidden text-white px-3 py-1 bg-red-700 hover:bg-red-600 rounded transition text-xs font-bold uppercase tracking-wide">
+                            STOP EXECUTION
+                        </button>
+                        <button onclick="clearTerminal()" class="hover:text-white px-2 py-1 bg-gray-700 rounded transition">Clear</button>
+                    </div>
                 </div>
                 <div id="terminal" class="terminal-window p-4 text-sm"></div>
             </div>
@@ -91,7 +96,7 @@
             },
             'gen-profile': { 
                 title: 'Refresh Profile README', 
-                inputs: [{ type: 'select', id: 'input-data', label: 'Create Pull Request?', options: [{val: 'y', text: 'Yes, Open PR'}, {val: 'n', text: 'No, Just Save Draft'}] }]
+                inputs: [{ type: 'select', id: 'input-data', label: 'Create Pull Request?', options: [{val: 'y', text: 'Yes, Open PR'}, {val: 'n', text: 'No, Just Save Draft'}] }] 
             }
         };
 
@@ -116,6 +121,8 @@
         function runTool() {
             if (!currentTool) return;
             const terminal = document.getElementById('terminal');
+            const stopBtn = document.getElementById('stop-btn');
+            
             terminal.innerHTML += `\n<span class="text-blue-400">[WEB] Connecting to WebSocket for ${currentTool}...</span>\n`;
 
             if (ws) ws.close();
@@ -123,6 +130,8 @@
             ws = new WebSocket(`${protocol}://${window.location.host}/ws/run/${currentTool}`);
 
             ws.onopen = () => {
+                stopBtn.classList.remove('hidden'); // Show Stop Button
+                
                 let payload = { input: "" };
                 const inputEl = document.getElementById('input-data');
                 if (inputEl) payload.input = inputEl.value;
@@ -136,6 +145,8 @@
                 if (event.data.includes('[ANALYZING]')) span.className = 'text-white font-bold';
                 if (event.data.includes('Done!')) span.className = 'text-cyan-400 font-bold';
                 if (event.data.includes('SUCCESS!')) span.className = 'text-magenta-400 font-bold';
+                if (event.data.includes('[DEBUG]')) span.className = 'text-gray-500 italic';
+                if (event.data.includes('[ERROR]')) span.className = 'text-red-500 font-bold';
                 
                 terminal.appendChild(span);
                 terminal.scrollTop = terminal.scrollHeight;
@@ -143,7 +154,16 @@
 
             ws.onclose = () => {
                 terminal.innerHTML += '<span class="text-gray-500">\n[WEB] Disconnected.</span>\n';
+                stopBtn.classList.add('hidden'); // Hide Stop Button
             };
+        }
+        
+        function stopTool() {
+            if (ws) {
+                ws.close(); // This triggers the backend 'WebSocketDisconnect' exception
+                const terminal = document.getElementById('terminal');
+                terminal.innerHTML += '<span class="text-red-400">\n[WEB] STOP REQUESTED BY USER.</span>\n';
+            }
         }
 
         function clearTerminal() { document.getElementById('terminal').innerHTML = ''; }
