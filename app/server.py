@@ -75,8 +75,7 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
     # PowerShell execution string: dot-source script then call function
     ps_command = f". '{target['path']}'; {target['func']}"
     
-    await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...
-")
+    await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...\n")
     
     env = os.environ.copy()
     if APP_STATE["GH_TOKEN"]:
