@@ -75,7 +75,8 @@ async def get_repos():
         env["GH_PROMPT_DISABLED"] = "1"
         env["NO_COLOR"] = "1"
 
-        cmd = ["gh", "repo", "list", "--limit", "100", "--json", "nameWithOwner", "--order", "desc", "--sort", "updated"]
+        # Fixed command: removed --order and --sort which are not supported by 'gh repo list'
+        cmd = ["gh", "repo", "list", "--limit", "100", "--json", "nameWithOwner,updatedAt"]
         
         # Capture stderr to diagnose failure
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
@@ -85,6 +86,10 @@ async def get_repos():
             return JSONResponse([])
             
         repos = json.loads(result.stdout)
+        
+        # Sort in Python (descending by updatedAt)
+        repos.sort(key=lambda x: x.get('updatedAt', ''), reverse=True)
+        
         return JSONResponse([r["nameWithOwner"] for r in repos])
     except Exception as e:
         print(f"Exception fetching repos: {e}")
@@ -114,6 +119,7 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         target_repo = data.get("repo", "").strip()
         
         env = os.environ.copy()
+        # Ensure env vars are set
         if APP_STATE["GH_TOKEN"]:
             env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
         if APP_STATE["GEMINI_API_KEY"]:
@@ -121,27 +127,32 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
 
         working_dir = None
         if target_repo:
-            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...\n")
+            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...
+")
             repo_slug = target_repo.replace("https://github.com/", "").replace(".git", "")
             safe_name = repo_slug.split("/")[-1]
             workspace_path = f"/app/workspace/{safe_name}"
             
             if not os.path.exists(workspace_path):
                 os.makedirs(workspace_path, exist_ok=True)
-                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...\n")
+                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...
+")
                 subprocess.run(["gh", "repo", "clone", repo_slug, "."], cwd=workspace_path, check=False, env=env)
             else:
-                await websocket.send_text("[SYSTEM] Pulling latest changes...\n")
+                await websocket.send_text("[SYSTEM] Pulling latest changes...
+")
                 subprocess.run(["git", "pull"], cwd=workspace_path, check=False, env=env)
             
             working_dir = workspace_path
         
         ps_command = f". '{target['path']}'; {target['func']}"
-        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...\n")
+        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...
+")
         
         if "GEMINI_API_KEY" in env:
             masked = env["GEMINI_API_KEY"][:4] + "..." + env["GEMINI_API_KEY"][-4:]
-            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked}\n")
+            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked}
+")
 
         process = subprocess.Popen(
             ["pwsh", "-NoProfile", "-Command", ps_command],
