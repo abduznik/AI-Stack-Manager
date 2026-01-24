@@ -52,8 +52,10 @@ async def save_settings(
         os.environ["GEMINI_API_KEY"] = cleaned_key
         msg.append("Gemini API Key Saved.")
 
-    # Fixed Syntax Error using triple quotes
-    return HTMLResponse(content=f"<div class='p-4 bg-green-900 text-green-100 rounded"><br>'.join(msg)}</div>")
+    # Building HTML safely without complex f-string nesting
+    html_msg = "<br>".join(msg)
+    response_html = f"<div class='p-4 bg-green-900 text-green-100 rounded'>{html_msg}</div>"
+    return HTMLResponse(content=response_html)
 
 @app.get("/api/repos")
 async def get_repos():
@@ -62,21 +64,14 @@ async def get_repos():
         return JSONResponse([])
     
     try:
-        # Prepare environment with token
         env = os.environ.copy()
         env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
-
-        # Fetch up to 100 repos, sorted by update time
         cmd = ["gh", "repo", "list", "--limit", "100", "--json", "nameWithOwner", "--order", "desc", "--sort", "updated"]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
         repos = json.loads(result.stdout)
-        # Return just a list of strings "owner/repo"
         return JSONResponse([r["nameWithOwner"] for r in repos])
-    except subprocess.CalledProcessError as e:
-        print(f"Error fetching repos (Exit {e.returncode}): {e.stderr}")
-        return JSONResponse([])
     except Exception as e:
-        print(f"Unexpected error fetching repos: {e}")
+        print(f"Error fetching repos: {e}")
         return JSONResponse([])
 
 @app.websocket("/ws/run/{tool_name}")
@@ -105,40 +100,32 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         env = os.environ.copy()
         if APP_STATE["GH_TOKEN"]:
             env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
-        
         if APP_STATE["GEMINI_API_KEY"]:
             env["GEMINI_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
 
-        # Determine Working Directory
         working_dir = None
         if target_repo:
-            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...
-")
+            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...\n")
             repo_slug = target_repo.replace("https://github.com/", "").replace(".git", "")
             safe_name = repo_slug.split("/")[-1]
             workspace_path = f"/app/workspace/{safe_name}"
             
             if not os.path.exists(workspace_path):
                 os.makedirs(workspace_path, exist_ok=True)
-                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...
-")
+                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...\n")
                 subprocess.run(["gh", "repo", "clone", repo_slug, "."], cwd=workspace_path, check=False, env=env)
             else:
-                await websocket.send_text(f"[SYSTEM] Pulling latest changes...
-")
+                await websocket.send_text(f"[SYSTEM] Pulling latest changes...\n")
                 subprocess.run(["git", "pull"], cwd=workspace_path, check=False, env=env)
             
             working_dir = workspace_path
         
-        # PowerShell execution string
         ps_command = f". '{target['path']}'; {target['func']}"
-        
-        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...")
-        await websocket.send_text("\n")
+        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...\n")
         
         if "GEMINI_API_KEY" in env:
-            masked_key = env["GEMINI_API_KEY"][:4] + "..." + env["GEMINI_API_KEY"][-4:]
-            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked_key}\n")
+            masked = env["GEMINI_API_KEY"][:4] + "..." + env["GEMINI_API_KEY"][-4:]
+            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked}\n")
 
         process = subprocess.Popen(
             ["pwsh", "-NoProfile", "-Command", ps_command],
@@ -156,7 +143,6 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             process.stdin.flush()
             process.stdin.close()
 
-        # Stream output line by line
         for line in process.stdout:
             await websocket.send_text(line)
             
@@ -164,7 +150,7 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         await websocket.send_text(f"\n[SYSTEM] Finished with Exit Code: {process.returncode}")
         
     except WebSocketDisconnect:
-        print("Websocket disconnected.")
+        pass
     except Exception as e:
         try:
             await websocket.send_text(f"\n[ERROR] {str(e)}")
@@ -177,7 +163,6 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
                 process.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 process.kill()
-        
         try:
             await websocket.close()
         except:
