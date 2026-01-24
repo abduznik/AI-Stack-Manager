@@ -51,7 +51,7 @@ async def save_settings(
         os.environ["GEMINI_API_KEY"] = cleaned_key
         msg.append("Gemini API Key Saved.")
 
-    return HTMLResponse(content=f"<div class='p-4 bg-green-900 text-green-100 rounded">{'<br>'.join(msg)}</div>")
+    return HTMLResponse(content=f"<div class='p-4 bg-green-900 text-green-100 rounded">&{'<br>'.join(msg)}</div>")
 
 @app.websocket("/ws/run/{tool_name}")
 async def websocket_endpoint(websocket: WebSocket, tool_name: str):
@@ -70,6 +70,7 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         await websocket.close()
         return
 
+    process = None
     try:
         data = await websocket.receive_json()
         user_input = data.get("input", "")
@@ -77,7 +78,8 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         # PowerShell execution string: dot-source script then call function
         ps_command = f". '{target['path']}'; {target['func']}"
         
-        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}..\n")
+        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...
+")
         
         env = os.environ.copy()
         if APP_STATE["GH_TOKEN"]:
@@ -86,9 +88,11 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         if APP_STATE["GEMINI_API_KEY"]:
             env["GEMINI_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
             masked_key = APP_STATE["GEMINI_API_KEY"][:4] + "..." + APP_STATE["GEMINI_API_KEY"][-4:]
-            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked_key}\n")
+            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked_key}
+")
         else:
-            await websocket.send_text(f"[WARN] No Gemini Key found in settings!\n")
+            await websocket.send_text(f"[WARN] No Gemini Key found in settings!
+")
 
         process = subprocess.Popen(
             ["pwsh", "-NoProfile", "-Command", ps_command],
@@ -105,6 +109,7 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             process.stdin.flush()
             process.stdin.close()
 
+        # Stream output line by line
         for line in process.stdout:
             await websocket.send_text(line)
             
@@ -112,14 +117,14 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         await websocket.send_text(f"\n[SYSTEM] Finished with Exit Code: {process.returncode}")
         
     except WebSocketDisconnect:
-        print("Websocket disconnected, killing process...")
+        print("Websocket disconnected.")
     except Exception as e:
         try:
             await websocket.send_text(f"\n[ERROR] {str(e)}")
         except:
             pass
     finally:
-        if 'process' in locals() and process.poll() is None:
+        if process and process.poll() is None:
             process.terminate()
             try:
                 process.wait(timeout=2)
