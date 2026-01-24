@@ -53,7 +53,7 @@ async def save_settings(
         msg.append("Gemini API Key Saved.")
 
     # Fixed Syntax Error using triple quotes
-    return HTMLResponse(content=f"""<div class='p-4 bg-green-900 text-green-100 rounded">{'<br>'.join(msg)}</div>""")
+    return HTMLResponse(content=f"<div class='p-4 bg-green-900 text-green-100 rounded"><br>'.join(msg)}</div>")
 
 @app.get("/api/repos")
 async def get_repos():
@@ -62,14 +62,21 @@ async def get_repos():
         return JSONResponse([])
     
     try:
+        # Prepare environment with token
+        env = os.environ.copy()
+        env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
+
         # Fetch up to 100 repos, sorted by update time
         cmd = ["gh", "repo", "list", "--limit", "100", "--json", "nameWithOwner", "--order", "desc", "--sort", "updated"]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
         repos = json.loads(result.stdout)
         # Return just a list of strings "owner/repo"
         return JSONResponse([r["nameWithOwner"] for r in repos])
+    except subprocess.CalledProcessError as e:
+        print(f"Error fetching repos (Exit {e.returncode}): {e.stderr}")
+        return JSONResponse([])
     except Exception as e:
-        print(f"Error fetching repos: {e}")
+        print(f"Unexpected error fetching repos: {e}")
         return JSONResponse([])
 
 @app.websocket("/ws/run/{tool_name}")
@@ -95,21 +102,31 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         user_input = data.get("input", "")
         target_repo = data.get("repo", "").strip()
         
+        env = os.environ.copy()
+        if APP_STATE["GH_TOKEN"]:
+            env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
+        
+        if APP_STATE["GEMINI_API_KEY"]:
+            env["GEMINI_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
+
         # Determine Working Directory
         working_dir = None
         if target_repo:
-            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...\n")
+            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...
+")
             repo_slug = target_repo.replace("https://github.com/", "").replace(".git", "")
             safe_name = repo_slug.split("/")[-1]
             workspace_path = f"/app/workspace/{safe_name}"
             
             if not os.path.exists(workspace_path):
                 os.makedirs(workspace_path, exist_ok=True)
-                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...\n")
-                subprocess.run(["gh", "repo", "clone", repo_slug, "."], cwd=workspace_path, check=False)
+                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...
+")
+                subprocess.run(["gh", "repo", "clone", repo_slug, "."], cwd=workspace_path, check=False, env=env)
             else:
-                await websocket.send_text(f"[SYSTEM] Pulling latest changes...\n")
-                subprocess.run(["git", "pull"], cwd=workspace_path, check=False)
+                await websocket.send_text(f"[SYSTEM] Pulling latest changes...
+")
+                subprocess.run(["git", "pull"], cwd=workspace_path, check=False, env=env)
             
             working_dir = workspace_path
         
@@ -119,13 +136,8 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...")
         await websocket.send_text("\n")
         
-        env = os.environ.copy()
-        if APP_STATE["GH_TOKEN"]:
-            env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
-        
-        if APP_STATE["GEMINI_API_KEY"]:
-            env["GEMINI_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
-            masked_key = APP_STATE["GEMINI_API_KEY"][:4] + "..." + APP_STATE["GEMINI_API_KEY"][-4:]
+        if "GEMINI_API_KEY" in env:
+            masked_key = env["GEMINI_API_KEY"][:4] + "..." + env["GEMINI_API_KEY"][-4:]
             await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked_key}\n")
 
         process = subprocess.Popen(
