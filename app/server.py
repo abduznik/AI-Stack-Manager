@@ -37,11 +37,15 @@ async def save_settings(
 ):
     msg = []
     if gh_token:
-        APP_STATE["GH_TOKEN"] = gh_token.strip()
+        token_clean = gh_token.strip()
+        APP_STATE["GH_TOKEN"] = token_clean
+        # Set globally for the process
+        os.environ["GH_TOKEN"] = token_clean
+        
         try:
             # We use --with-token to avoid interactive prompts
             process = subprocess.Popen(["gh", "auth", "login", "--with-token"], stdin=subprocess.PIPE, text=True)
-            process.communicate(input=APP_STATE["GH_TOKEN"])
+            process.communicate(input=token_clean)
             msg.append("GitHub Token Saved & Authenticated.")
         except Exception as e:
             msg.append(f"GitHub Auth Error: {str(e)}")
@@ -52,7 +56,6 @@ async def save_settings(
         os.environ["GEMINI_API_KEY"] = cleaned_key
         msg.append("Gemini API Key Saved.")
 
-    # Building HTML safely without complex f-string nesting
     html_msg = "<br>".join(msg)
     response_html = f"<div class='p-4 bg-green-900 text-green-100 rounded'>{html_msg}</div>"
     return HTMLResponse(content=response_html)
@@ -61,17 +64,30 @@ async def save_settings(
 async def get_repos():
     """Fetches list of repositories for the authenticated user"""
     if not APP_STATE["GH_TOKEN"]:
+        print("DEBUG: No GH_TOKEN found in state.")
         return JSONResponse([])
     
     try:
         env = os.environ.copy()
         env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
+        
+        # Explicitly disable interactivity
+        env["GH_PROMPT_DISABLED"] = "1"
+        env["NO_COLOR"] = "1"
+
         cmd = ["gh", "repo", "list", "--limit", "100", "--json", "nameWithOwner", "--order", "desc", "--sort", "updated"]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, env=env)
+        
+        # Capture stderr to diagnose failure
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+        
+        if result.returncode != 0:
+            print(f"GH Error (Code {result.returncode}): {result.stderr}")
+            return JSONResponse([])
+            
         repos = json.loads(result.stdout)
         return JSONResponse([r["nameWithOwner"] for r in repos])
     except Exception as e:
-        print(f"Error fetching repos: {e}")
+        print(f"Exception fetching repos: {e}")
         return JSONResponse([])
 
 @app.websocket("/ws/run/{tool_name}")
@@ -98,6 +114,7 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         target_repo = data.get("repo", "").strip()
         
         env = os.environ.copy()
+        # Ensure env vars are set
         if APP_STATE["GH_TOKEN"]:
             env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
         if APP_STATE["GEMINI_API_KEY"]:
@@ -105,27 +122,32 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
 
         working_dir = None
         if target_repo:
-            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...\n")
+            await websocket.send_text(f"[SYSTEM] Switching context to {target_repo}...
+")
             repo_slug = target_repo.replace("https://github.com/", "").replace(".git", "")
             safe_name = repo_slug.split("/")[-1]
             workspace_path = f"/app/workspace/{safe_name}"
             
             if not os.path.exists(workspace_path):
                 os.makedirs(workspace_path, exist_ok=True)
-                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...\n")
+                await websocket.send_text(f"[SYSTEM] Cloning {repo_slug}...
+")
                 subprocess.run(["gh", "repo", "clone", repo_slug, "."], cwd=workspace_path, check=False, env=env)
             else:
-                await websocket.send_text(f"[SYSTEM] Pulling latest changes...\n")
+                await websocket.send_text(f"[SYSTEM] Pulling latest changes...
+")
                 subprocess.run(["git", "pull"], cwd=workspace_path, check=False, env=env)
             
             working_dir = workspace_path
         
         ps_command = f". '{target['path']}'; {target['func']}"
-        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...\n")
+        await websocket.send_text(f"[SYSTEM] Initializing {tool_name}...
+")
         
         if "GEMINI_API_KEY" in env:
             masked = env["GEMINI_API_KEY"][:4] + "..." + env["GEMINI_API_KEY"][-4:]
-            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked}\n")
+            await websocket.send_text(f"[DEBUG] Using Gemini Key: {masked}
+")
 
         process = subprocess.Popen(
             ["pwsh", "-NoProfile", "-Command", ps_command],
