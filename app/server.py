@@ -111,8 +111,14 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         
         # Suppress Node.js debug/TTY formatting
         env["NODE_ENV"] = "production"
-        env["CI"] = "true"
-        env["TERM"] = "dumb"
+        
+        # FIX: Remove CI flag to prevent the CLI from entering "debug/json-log" mode
+        if "CI" in env:
+            del env["CI"]
+            
+        # FIX: Set TERM to xterm so the CLI believes it has a standard terminal
+        # This prevents "dumb" terminal crashes and [object Object] rendering errors
+        env["TERM"] = "xterm"
 
         working_dir = None
         if target_repo:
