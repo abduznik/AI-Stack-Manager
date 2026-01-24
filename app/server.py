@@ -48,6 +48,7 @@ async def save_settings(
         except Exception as e:
             msg.append("GH Auth Error: " + str(e))
             
+    cleaned_key = None
     if gemini_key:
         cleaned_key = gemini_key.strip().replace('"', '').replace("'", "")
         APP_STATE["GEMINI_API_KEY"] = cleaned_key
@@ -112,13 +113,12 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         # Suppress Node.js debug/TTY formatting
         env["NODE_ENV"] = "production"
         
-        # FIX: Remove CI flag to prevent the CLI from entering "debug/json-log" mode
+        # Ensure CI is NOT set (prevents verbose object dumping)
         if "CI" in env:
             del env["CI"]
             
-        # FIX: Set TERM to xterm so the CLI believes it has a standard terminal
-        # This prevents "dumb" terminal crashes and [object Object] rendering errors
-        env["TERM"] = "xterm"
+        env["TERM"] = "xterm"   # Keeps standard terminal behavior
+        env["NO_COLOR"] = "1"   # Prevents ANSI color codes from breaking JSON parsing
 
         working_dir = None
         if target_repo:
@@ -134,6 +134,14 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             working_dir = workspace_path
         
         ps_command = ". '" + target['path'] + "'; " + target['func']
+        
+        # --- FIX: SANITIZE INPUT ---
+        # Parentheses in the input are breaking the shell wrapper chain or 
+        # triggering CLI parsing errors. We strip them to ensure stability.
+        if user_input:
+            user_input = user_input.replace("(", "").replace(")", "")
+        # ---------------------------
+
         await websocket.send_text("[SYSTEM] Initializing " + tool_name + "...\n")
         
         process = subprocess.Popen(
