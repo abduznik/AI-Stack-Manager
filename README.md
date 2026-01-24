@@ -4,11 +4,32 @@ A centralized Web UI to manage your AI-powered GitHub tools. This dashboard wrap
 
 ## Quick Start (Homelab)
 
-1. Download `homelab-compose.yml` to your server.
+1. Create a `docker-compose.yml` file on your server with the following content:
+
+   ```yaml
+   version: '3.8'
+
+   services:
+     ai-manager:
+       image: ghcr.io/abduznik/ai-stack-manager:latest
+       container_name: ai-stack-manager
+       ports:
+         - "8090:8090"
+       volumes:
+         # Persist the cloned scripts inside the container
+         - ai_scripts_data:/scripts
+       environment:
+         - GEMINI_API_KEY=your_key_here
+         - GH_TOKEN=your_token_here
+       restart: unless-stopped
+
+   volumes:
+     ai_scripts_data:
+   ```
 
 2. Run the container:
    ```bash
-   docker compose -f homelab-compose.yml up -d
+   docker compose up -d
    ```
    *Note: On first run, the container will automatically clone the necessary AI repositories into its internal volume.*
 
@@ -16,7 +37,7 @@ A centralized Web UI to manage your AI-powered GitHub tools. This dashboard wrap
 
 ## Authentication Setup
 
-To use these tools, you need to provide API keys in the Auth Settings section of the dashboard.
+To use these tools, you need to provide API keys in the Auth Settings section of the dashboard (or via environment variables above).
 
 ### 1. Google Gemini API Key
 Used to power the AI logic for descriptions, issues, and categorization.
