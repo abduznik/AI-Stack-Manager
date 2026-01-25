@@ -19,34 +19,31 @@ RUN apt-get update && apt-get install -y \
 # Generate locales
 RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen
 
-# 2. Install Node.js
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs
-
-# 3. Install Google Gemini CLI
-RUN npm install -g @google/gemini-cli
-
-# 4. Install PowerShell (pwsh)
+# 2. Install PowerShell
 RUN wget -q "https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb" \
     && dpkg -i packages-microsoft-prod.deb \
     && apt-get update \
-    && apt-get install -y powershell
+    && apt-get install -y powershell gh
 
-RUN apt-get update && apt-get install -y gh
-
-# 5. Install Python Deps
+# 3. Install Python Deps (Includes google-genai now)
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 6. Copy App Code
+# 4. Copy App Code
 COPY . .
 
-# 7. Verify Server Code
+# 5. [CRITICAL] Install The "Shim"
+# We create a fake 'gemini' command that actually runs our Python script.
+# This tricks your existing PowerShell scripts into working with the new models.
+RUN echo '#!/bin/bash' > /usr/local/bin/gemini && \
+    echo 'python3 /app/app/gemini_shim.py "$@"' >> /usr/local/bin/gemini && \
+    chmod +x /usr/local/bin/gemini
+
+# 6. Verify Server Code
 RUN python -m py_compile app/server.py
 
-# 8. Optimized Compatibility Wrapper for Windows Scripts (cmd /c)
-# Improved logic to handle both single-string and multi-argument calls
+# 7. Optimized Compatibility Wrapper
 RUN echo '#!/bin/bash' > /usr/local/bin/cmd && \
     echo 'if [ "$1" = "/c" ]; then shift; fi' >> /usr/local/bin/cmd && \
     echo 'if [ $# -eq 1 ]; then exec /bin/bash -c "$1"; else exec "$@"; fi' >> /usr/local/bin/cmd && \
