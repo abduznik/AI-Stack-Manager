@@ -2,7 +2,52 @@ import os
 import sys
 import argparse
 import time
+import subprocess
 from google import genai
+
+# ==========================================
+#  GEMINI SHIM v2.0 (Orchestrator Edition)
+# ==========================================
+
+def get_file_tree():
+    """
+    Returns a clean string of the project's file structure.
+    Crucial for preventing AI hallucinations.
+    """
+    # Method 1: Git (Fastest & Most Accurate)
+    try:
+        # We assume the CWD is the target repository root
+        result = subprocess.run(
+            ["git", "ls-files"], 
+            capture_output=True, 
+            text=True, 
+            timeout=2
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            files = result.stdout.strip().split('\n')
+            # Limit to top 300 files to save context window
+            return "\n".join(files[:300])
+    except Exception:
+        pass
+
+    # Method 2: Manual Scan (Fallback for non-git folders)
+    allowed_exts = {'.py', '.js', '.ts', '.tsx', '.html', '.css', '.md', '.json', '.yml', '.rs', '.c', '.cpp', '.h', '.ps1'}
+    file_list = []
+    
+    for root, dirs, files in os.walk("."):
+        # Skip hidden folders, node_modules, and the script tools themselves
+        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', 'dist', 'venv', '__pycache__']]
+        
+        for file in files:
+            if os.path.splitext(file)[1] in allowed_exts:
+                rel_path = os.path.relpath(os.path.join(root, file), ".")
+                file_list.append(rel_path)
+                if len(file_list) >= 100: # Hard limit for fallback
+                    break
+        if len(file_list) >= 100:
+            break
+            
+    return "\n".join(file_list)
 
 def main():
     # 1. Parse Arguments
@@ -14,34 +59,40 @@ def main():
     full_prompt = " ".join(args.prompt)
     model_id = args.model
 
-    # 2. AUTO-DETECT CONTEXT (The Magic Fix)
-    # Get the repo name from the folder path
+    # 2. AUTO-DETECT CONTEXT
+    # server.py sets the CWD to the /app/workspace/<repo> folder.
     current_folder = os.path.basename(os.getcwd())
-    
-    # Detect tech stack hints
-    tech_hint = ""
-    if os.path.exists("main.ts"): tech_hint = "(Obsidian Plugin / TypeScript)"
-    elif os.path.exists("package.json"): tech_hint = "(Node.js / JavaScript)"
-    elif os.path.exists("requirements.txt"): tech_hint = "(Python Project)"
-    elif os.path.exists("Cargo.toml"): tech_hint = "(Rust Project)"
+    file_tree = get_file_tree()
 
-    # Inject context invisibly at the end of the prompt
-    system_context = f"\n\n[SYSTEM CONTEXT: The user is working in the repository '{current_folder}' {tech_hint}. If they ask to 'check code', assume standard file structures for this tech stack.]"
+    # 3. INJECT CONTEXT
+    # This invisible footer forces the AI to look at the REAL files.
+    system_context = f"""
+
+    [SYSTEM CONTEXT INJECTION]
+    Current Project Name: {current_folder}
+    
+    ACTUAL FILE STRUCTURE (Do not hallucinate files outside this list):
+    ---
+    {file_tree}
+    ---
+    """
+    
     final_prompt = full_prompt + system_context
 
-    # 3. Setup Client
+    # 4. Setup Client
     api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        print("Error: GEMINI_API_KEY missing.", file=sys.stderr)
+        # Print to stderr so PowerShell script catches it as an error
+        print("Error: GEMINI_API_KEY missing in Docker environment.", file=sys.stderr)
         sys.exit(1)
 
     client = genai.Client(api_key=api_key)
 
-    # 4. Safety Sleep for Gemini 3 Preview (Prevents 429/500 errors)
+    # 5. Safety Sleep (Rate Limit Protection)
     if "gemini-3" in model_id:
-        time.sleep(15)
+        time.sleep(5) 
 
-    # 5. Execute
+    # 6. Execute
     try:
         response = client.models.generate_content(
             model=model_id,
@@ -50,11 +101,10 @@ def main():
         if response.text:
             print(response.text)
         else:
-            print("Error: Empty response.", file=sys.stderr)
+            print("Error: Empty response from Gemini.", file=sys.stderr)
             sys.exit(1)
 
     except Exception as e:
-        # Print to stderr so PowerShell catches it as an error
         print(f"Error executing {model_id}: {e}", file=sys.stderr)
         sys.exit(1)
 
