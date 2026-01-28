@@ -105,6 +105,7 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         data = await websocket.receive_json()
         user_input = data.get("input", "")
         user_file = data.get("file", "")
+        user_autopr = data.get("autopr", False)
         target_repo = data.get("repo", "").strip()
         
         env = os.environ.copy()
@@ -151,8 +152,11 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             # But to keep the PS script compatible with manual usage, we can just pass the Env Var *as* the arg value
             ps_command = f". '{target['path']}'; ai-pro-arch -Mode $env:AI_MODE -Input $env:AI_INPUT"
             
-            if target['mode'] == 'Fix' and user_file:
-                ps_command += " -File $env:AI_FILE"
+            if target['mode'] == 'Fix':
+                if user_file:
+                    ps_command += " -File $env:AI_FILE"
+                if user_autopr:
+                    ps_command += " -AutoPR"
                 
             # Clear user_input so it's not sent to stdin
             user_input = None 

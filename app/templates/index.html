@@ -139,7 +139,8 @@
                 needsRepo: true,
                 inputs: [
                     { type: 'text', id: 'input-file', placeholder: 'Relative File Path (e.g., src/main.ts)' },
-                    { type: 'textarea', id: 'input-data', placeholder: 'Describe the error or what needs fixing.' }
+                    { type: 'textarea', id: 'input-data', placeholder: 'Describe the error or what needs fixing.' },
+                    { type: 'checkbox', id: 'input-autopr', label: 'Create Pull Request automatically?' }
                 ]
             },
             'arch-explain': {
@@ -174,6 +175,8 @@
                     inputContainer.innerHTML += `<div class="text-sm text-gray-400 mb-1">${inp.label}</div><select id="${inp.id}" class="w-full bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none mb-2">${opts}</select>`;
                 } else if (inp.type === 'text') {
                     inputContainer.innerHTML += `<input type="text" id="${inp.id}" class="w-full bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none mb-2" placeholder="${inp.placeholder}">`;
+                } else if (inp.type === 'checkbox') {
+                    inputContainer.innerHTML += `<div class="flex items-center gap-2 mb-2 p-2 bg-gray-900 border border-gray-600 rounded"><input type="checkbox" id="${inp.id}" class="w-4 h-4"><label for="${inp.id}" class="text-sm text-gray-300 cursor-pointer select-none">${inp.label}</label></div>`;
                 }
             });
             document.getElementById('run-btn').classList.remove('hidden');
@@ -211,13 +214,16 @@
             ws.onopen = () => {
                 stopBtn.classList.remove('hidden');
                 
-                let payload = { input: "", file: "", repo: "" };
+                let payload = { input: "", file: "", repo: "", autopr: false };
                 
                 const inputEl = document.getElementById('input-data');
                 if (inputEl) payload.input = inputEl.value;
                 
                 const fileEl = document.getElementById('input-file');
                 if (fileEl) payload.file = fileEl.value;
+
+                const autoPrEl = document.getElementById('input-autopr');
+                if (autoPrEl) payload.autopr = autoPrEl.checked;
 
                 const repoEl = document.getElementById('target-repo');
                 if (!repoEl.parentElement.parentElement.classList.contains('hidden')) {
