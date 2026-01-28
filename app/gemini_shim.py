@@ -52,11 +52,19 @@ def get_file_tree():
 def main():
     # 1. Parse Arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("prompt", nargs="+", help="The prompt text")
+    parser.add_argument("prompt", nargs="*", help="The prompt text") # Changed to * (optional)
     parser.add_argument("--model", required=True, help="Model ID")
     args = parser.parse_args()
 
-    full_prompt = " ".join(args.prompt)
+    # HYBRID INPUT: Prefer Env Var (Robust), Fallback to Args (Legacy)
+    full_prompt = os.environ.get("GEMINI_PROMPT", "")
+    if not full_prompt:
+        if args.prompt:
+            full_prompt = " ".join(args.prompt)
+        else:
+            print("Error: No prompt provided (via args or GEMINI_PROMPT).", file=sys.stderr)
+            sys.exit(1)
+
     model_id = args.model
 
     # 2. AUTO-DETECT CONTEXT
