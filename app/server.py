@@ -89,7 +89,10 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         "gen-desc": {"path": "/scripts/AI-Gen-Description/script.ps1", "func": "gen-desc"},
         "gen-issue": {"path": "/scripts/AI-Gen-Issue/script.ps1", "func": "gen-issue"},
         "gen-profile": {"path": "/scripts/AI-Gen-Profile/script.ps1", "func": "gen-profile"},
-        "gen-topics": {"path": "/scripts/AI-Gen-Topics/script.ps1", "func": "gen-topics"}
+        "gen-topics": {"path": "/scripts/AI-Gen-Topics/script.ps1", "func": "gen-topics"},
+        "arch-init": {"path": "/scripts/AI-Pro-Arch/script.ps1", "func": "ai-pro-arch", "mode": "Init"},
+        "arch-fix": {"path": "/scripts/AI-Pro-Arch/script.ps1", "func": "ai-pro-arch", "mode": "Fix"},
+        "arch-explain": {"path": "/scripts/AI-Pro-Arch/script.ps1", "func": "ai-pro-arch", "mode": "Explain"}
     }
     
     target = script_map.get(tool_name)
@@ -101,6 +104,7 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
     try:
         data = await websocket.receive_json()
         user_input = data.get("input", "")
+        user_file = data.get("file", "")
         target_repo = data.get("repo", "").strip()
         
         env = os.environ.copy()
@@ -136,7 +140,24 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
                 subprocess.run(["git", "pull"], cwd=workspace_path, check=False, env=env)
             working_dir = workspace_path
         
-        ps_command = ". '" + target['path'] + "'; " + target['func']
+        # Construct Command based on Tool Type
+        if "mode" in target:
+            # IT IS AN AI-PRO-ARCH TOOL -> Use Parameters
+            # We use single quotes for PowerShell parameters to avoid shell expansion issues
+            clean_input = user_input.replace("'", "''")
+            clean_file = user_file.replace("'", "''")
+            
+            ps_command = f". '{target['path']}'; {target['func']} -Mode '{target['mode']}' -Input '{clean_input}'"
+            
+            if target['mode'] == 'Fix' and clean_file:
+                ps_command += f" -File '{clean_file}'"
+                
+            # Clear user_input so it's not sent to stdin later
+            user_input = None 
+            
+        else:
+            # LEGACY TOOL -> Use Stdin
+            ps_command = ". '" + target['path'] + "'; " + target['func']
         
         await websocket.send_text("[SYSTEM] Initializing " + tool_name + "...\n")
         

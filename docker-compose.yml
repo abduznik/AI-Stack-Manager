@@ -11,6 +11,7 @@ services:
       - ../AI-Gen-Issue:/scripts/AI-Gen-Issue
       - ../AI-Gen-Profile:/scripts/AI-Gen-Profile
       - ../AI-Gen-Topics:/scripts/AI-Gen-Topics
+      - ../AI-Pro-Arch:/scripts/AI-Pro-Arch
     environment:
       # Optional: Pre-fill if you have them in your host shell
       - GEMINI_API_KEY=${GEMINI_API_KEY}

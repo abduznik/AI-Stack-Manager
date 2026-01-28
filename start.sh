@@ -24,6 +24,7 @@ ensure_repo "https://github.com/abduznik/AI-Gen-Description" "AI-Gen-Description
 ensure_repo "https://github.com/abduznik/AI-Gen-Issue" "AI-Gen-Issue"
 ensure_repo "https://github.com/abduznik/AI-Gen-Profile" "AI-Gen-Profile"
 ensure_repo "https://github.com/abduznik/AI-Gen-Topics" "AI-Gen-Topics"
+ensure_repo "https://github.com/abduznik/ai-pro-arch" "AI-Pro-Arch"
 
 echo "[INIT] Starting Server..."
 exec uvicorn app.server:app --host 0.0.0.0 --port 8090

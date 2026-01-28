@@ -45,6 +45,20 @@
                     <div class="font-bold">Profile</div>
                     <div class="text-xs text-gray-500">AI-Gen-Profile</div>
                 </button>
+                <div class="pt-4 border-t border-gray-700">
+                    <button onclick="selectTool('arch-init')" class="w-full text-left p-3 rounded hover:bg-gray-800 transition border border-gray-700 focus:ring-2 ring-fuchsia-500 outline-none">
+                        <div class="font-bold text-fuchsia-400">New Project</div>
+                        <div class="text-xs text-gray-500">Scaffold Architecture</div>
+                    </button>
+                    <button onclick="selectTool('arch-fix')" class="w-full text-left p-3 rounded hover:bg-gray-800 transition border border-gray-700 focus:ring-2 ring-fuchsia-500 outline-none mt-2">
+                        <div class="font-bold text-fuchsia-400">Fix Code</div>
+                        <div class="text-xs text-gray-500">Patch File/Error</div>
+                    </button>
+                    <button onclick="selectTool('arch-explain')" class="w-full text-left p-3 rounded hover:bg-gray-800 transition border border-gray-700 focus:ring-2 ring-fuchsia-500 outline-none mt-2">
+                        <div class="font-bold text-fuchsia-400">Explain</div>
+                        <div class="text-xs text-gray-500">Concept Analysis</div>
+                    </button>
+                </div>
             </div>
 
             <div class="mt-8 p-4 bg-gray-800 rounded border border-gray-700">
@@ -114,6 +128,24 @@
                 title: 'Refresh Profile README', 
                 needsRepo: false,
                 inputs: [{ type: 'select', id: 'input-data', label: 'Create Pull Request?', options: [{val: 'y', text: 'Yes, Open PR'}, {val: 'n', text: 'No, Just Save Draft'}] }]
+            },
+            'arch-init': {
+                title: 'Project Scaffolding',
+                needsRepo: false,
+                inputs: [{ type: 'textarea', id: 'input-data', placeholder: 'Describe the project you want to build (e.g., "A Python FastAPI app with a React frontend").' }]
+            },
+            'arch-fix': {
+                title: 'Smart Code Fix',
+                needsRepo: true,
+                inputs: [
+                    { type: 'text', id: 'input-file', placeholder: 'Relative File Path (e.g., src/main.ts)' },
+                    { type: 'textarea', id: 'input-data', placeholder: 'Describe the error or what needs fixing.' }
+                ]
+            },
+            'arch-explain': {
+                title: 'Code Explanation',
+                needsRepo: true,
+                inputs: [{ type: 'textarea', id: 'input-data', placeholder: 'What concept or code do you want explained?' }]
             }
         };
 
@@ -127,7 +159,6 @@
             const repoBox = document.getElementById('repo-selector');
             if (config.needsRepo) {
                 repoBox.classList.remove('hidden');
-                // Auto-load repos if empty
                 if(document.getElementById('target-repo').options.length <= 1) {
                     loadRepos();
                 }
@@ -137,10 +168,12 @@
             
             config.inputs.forEach(inp => {
                 if (inp.type === 'textarea') {
-                    inputContainer.innerHTML += `<textarea id="${inp.id}" class="w-full h-32 bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none" placeholder="${inp.placeholder}"></textarea>`;
+                    inputContainer.innerHTML += `<textarea id="${inp.id}" class="w-full h-32 bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none mb-2" placeholder="${inp.placeholder}"></textarea>`;
                 } else if (inp.type === 'select') {
                     let opts = inp.options.map(o => `<option value="${o.val}">${o.text}</option>`).join('');
-                    inputContainer.innerHTML += `<div class="text-sm text-gray-400 mb-1">${inp.label}</div><select id="${inp.id}" class="w-full bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none">${opts}</select>`;
+                    inputContainer.innerHTML += `<div class="text-sm text-gray-400 mb-1">${inp.label}</div><select id="${inp.id}" class="w-full bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none mb-2">${opts}</select>`;
+                } else if (inp.type === 'text') {
+                    inputContainer.innerHTML += `<input type="text" id="${inp.id}" class="w-full bg-gray-900 border border-gray-600 rounded p-3 focus:border-blue-500 outline-none mb-2" placeholder="${inp.placeholder}">`;
                 }
             });
             document.getElementById('run-btn').classList.remove('hidden');
@@ -178,11 +211,14 @@
             ws.onopen = () => {
                 stopBtn.classList.remove('hidden');
                 
-                let payload = { input: "", repo: "" };
+                let payload = { input: "", file: "", repo: "" };
+                
                 const inputEl = document.getElementById('input-data');
                 if (inputEl) payload.input = inputEl.value;
+                
+                const fileEl = document.getElementById('input-file');
+                if (fileEl) payload.file = fileEl.value;
 
-                // Grab repo from dropdown
                 const repoEl = document.getElementById('target-repo');
                 if (!repoEl.parentElement.parentElement.classList.contains('hidden')) {
                     payload.repo = repoEl.value;
