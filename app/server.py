@@ -103,11 +103,14 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
     process = None
     try:
         data = await websocket.receive_json()
-        user_input = data.get("input", "")
+        user_input = data.get("input", "").strip() # Trim edges only
         user_file = data.get("file", "")
         user_autopr = data.get("autopr", False)
         target_repo = data.get("repo", "").strip()
         
+        if user_input:
+             print(f"DEBUG INPUT RECEIVED: {user_input[:50]}...") # Log start of input
+
         env = os.environ.copy()
         if APP_STATE["GH_TOKEN"]:
             env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
