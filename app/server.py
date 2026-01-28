@@ -142,17 +142,19 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         
         # Construct Command based on Tool Type
         if "mode" in target:
-            # IT IS AN AI-PRO-ARCH TOOL -> Use Parameters
-            # We use single quotes for PowerShell parameters to avoid shell expansion issues
-            clean_input = user_input.replace("'", "''")
-            clean_file = user_file.replace("'", "''")
+            # IT IS AN AI-PRO-ARCH TOOL -> Use Environment Variables for Safety
+            env["AI_INPUT"] = user_input
+            env["AI_FILE"] = user_file
+            env["AI_MODE"] = target['mode']
             
-            ps_command = f". '{target['path']}'; {target['func']} -Mode '{target['mode']}' -Input '{clean_input}'"
+            # We call the script and let it read from Env Vars or Args
+            # But to keep the PS script compatible with manual usage, we can just pass the Env Var *as* the arg value
+            ps_command = f". '{target['path']}'; ai-pro-arch -Mode $env:AI_MODE -Input $env:AI_INPUT"
             
-            if target['mode'] == 'Fix' and clean_file:
-                ps_command += f" -File '{clean_file}'"
+            if target['mode'] == 'Fix' and user_file:
+                ps_command += " -File $env:AI_FILE"
                 
-            # Clear user_input so it's not sent to stdin later
+            # Clear user_input so it's not sent to stdin
             user_input = None 
             
         else:
