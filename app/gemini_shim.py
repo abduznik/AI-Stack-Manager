@@ -105,6 +105,8 @@ def main():
             sys.exit(1)
 
     except Exception as e:
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         print(f"Error executing {model_id}: {e}", file=sys.stderr)
         sys.exit(1)
 
