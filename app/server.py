@@ -60,9 +60,7 @@ async def save_settings(
     if cleaned_key:
         print("DEBUG: Gemini API Key set (length: " + str(len(cleaned_key)) + ")")
     
-    html_msg = "<br>".join(msg)
-    response_html = "<div class='p-4 bg-green-900 text-green-100 rounded'>" + html_msg + "</div>"
-    return HTMLResponse(content=response_html)
+      return templates.TemplateResponse("partials/settings_alert.html", {"request": request, "msg": "<br>".join(msg)})
 
 @app.get("/api/repos")
 async def get_repos():
