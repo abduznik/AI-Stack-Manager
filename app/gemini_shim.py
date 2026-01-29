@@ -3,8 +3,8 @@ import sys
 import argparse
 import time
 import subprocess
-import google.generativeai as genai
-from google.generativeai.types import ServerError, ClientError
+from google import genai
+from google.genai.errors import ServerError, ClientError
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # ==========================================
