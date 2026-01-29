@@ -3,7 +3,9 @@ import sys
 import argparse
 import time
 import subprocess
-from google import genai
+import google.generativeai as genai
+from google.generativeai.types import ServerError, ClientError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # ==========================================
 #  GEMINI SHIM v2.0 (Orchestrator Edition)
@@ -102,10 +104,20 @@ def main():
 
     # 6. Execute
     try:
-        response = client.models.generate_content(
-            model=model_id,
-            contents=final_prompt
+        @retry(
+            retry=retry_if_exception_type(ServerError),
+            wait=wait_exponential(multiplier=2, min=4, max=20),
+            stop=stop_after_attempt(5),
+            reraise=True
         )
+        def generate_with_retry():
+            return client.models.generate_content(
+                model=model_id,
+                contents=final_prompt
+            )
+
+        response = generate_with_retry()
+        
         if response.text:
             print(response.text)
         else:
