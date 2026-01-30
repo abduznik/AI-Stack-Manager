@@ -59,9 +59,8 @@ async def save_settings(
 
     if cleaned_key:
         print("DEBUG: Gemini API Key set (length: " + str(len(cleaned_key)) + ")")
-    
-      return templates.TemplateResponse("partials/settings_alert.html", {"request": request, "msg": "<br>".join(msg)})
 
+    return templates.TemplateResponse("partials/settings_alert.html", {"request": request, "messages": msg})
 @app.get("/api/repos")
 async def get_repos():
     if not APP_STATE["GH_TOKEN"]:
