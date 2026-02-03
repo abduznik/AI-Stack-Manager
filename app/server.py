@@ -32,6 +32,7 @@ async def read_root(request: Request):
 
 @app.post("/settings")
 async def save_settings(
+    request: Request,
     gh_token: str = Form(None), 
     gemini_key: str = Form(None)
 ):
@@ -48,19 +49,14 @@ async def save_settings(
         except Exception as e:
             msg.append("GH Auth Error: " + str(e))
             
-    cleaned_key = None
     if gemini_key:
         cleaned_key = gemini_key.strip().replace('"', '').replace("'", "")
         APP_STATE["GEMINI_API_KEY"] = cleaned_key
-        # Set both variants just in case
         os.environ["GEMINI_API_KEY"] = cleaned_key
-        os.environ["GOOGLE_API_KEY"] = cleaned_key
         msg.append("Gemini API Key Saved.")
 
-    if cleaned_key:
-        print("DEBUG: Gemini API Key set (length: " + str(len(cleaned_key)) + ")")
-
     return templates.TemplateResponse("partials/settings_alert.html", {"request": request, "messages": msg})
+
 @app.get("/api/repos")
 async def get_repos():
     if not APP_STATE["GH_TOKEN"]:
@@ -82,94 +78,71 @@ async def get_repos():
 async def websocket_endpoint(websocket: WebSocket, tool_name: str):
     await websocket.accept()
     
-    script_map = {
-        "gen-desc": {"path": "/scripts/AI-Gen-Description/script.ps1", "func": "gen-desc"},
-        "gen-issue": {"path": "/scripts/AI-Gen-Issue/script.ps1", "func": "gen-issue"},
-        "gen-profile": {"path": "/scripts/AI-Gen-Profile/script.ps1", "func": "gen-profile"},
-        "gen-topics": {"path": "/scripts/AI-Gen-Topics/script.ps1", "func": "gen-topics"},
-        "arch-init": {"path": "/scripts/AI-Pro-Arch/script.ps1", "func": "ai-pro-arch", "mode": "Init"},
-        "arch-fix": {"path": "/scripts/AI-Pro-Arch/script.ps1", "func": "ai-pro-arch", "mode": "Fix"},
-        "arch-explain": {"path": "/scripts/AI-Pro-Arch/script.ps1", "func": "ai-pro-arch", "mode": "Explain"}
+    # Mapping tool names to Git-Alchemist CLI arguments
+    tool_map = {
+        "gen-desc": ["describe"],
+        "gen-topics": ["topics"],
+        "gen-issue": ["issue"],
+        "gen-profile": ["profile"],
+        "arch-init": ["scaffold"],
+        "arch-fix": ["fix"],
+        "arch-explain": ["explain"]
     }
     
-    target = script_map.get(tool_name)
-    if not target:
+    args_base = tool_map.get(tool_name)
+    if not args_base:
         await websocket.close()
         return
 
     process = None
     try:
         data = await websocket.receive_json()
-        user_input = data.get("input", "").strip() # Trim edges only
+        user_input = data.get("input", "").strip()
         user_file = data.get("file", "")
-        user_autopr = data.get("autopr", False)
         target_repo = data.get("repo", "").strip()
+        is_smart = data.get("smart", False)
         
-        if user_input:
-             print(f"DEBUG INPUT RECEIVED: {user_input[:50]}...") # Log start of input
-
         env = os.environ.copy()
-        if APP_STATE["GH_TOKEN"]:
-            env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
-        if APP_STATE["GEMINI_API_KEY"]:
-            env["GEMINI_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
-            env["GOOGLE_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
-        
-        # Suppress Node.js debug/TTY formatting
-        env["NODE_ENV"] = "production"
-        
-        # Ensure CI is NOT set (prevents verbose object dumping)
-        if "CI" in env:
-            del env["CI"]
-            
-        env["TERM"] = "xterm"   # Keeps standard terminal behavior
-        env["NO_COLOR"] = "1"   # Prevents ANSI color codes from breaking JSON parsing
+        env["GEMINI_API_KEY"] = APP_STATE["GEMINI_API_KEY"]
+        env["GH_TOKEN"] = APP_STATE["GH_TOKEN"]
+        env["PYTHONPATH"] = os.getcwd() # Ensure imports work
 
+        # Build full command
+        cmd = ["python3", "-m", "app.git_alchemist.src.cli"]
+        if is_smart:
+            cmd.append("--smart")
+        
+        cmd.extend(args_base)
+        
+        # Add tool-specific positional/optional args
+        if tool_name == "gen-issue":
+            cmd.append(user_input)
+        elif tool_name == "arch-init":
+            cmd.append(user_input)
+        elif tool_name == "arch-fix":
+            cmd.append(user_file)
+            cmd.append(user_input)
+        elif tool_name == "arch-explain":
+            cmd.append(user_input)
+        
         working_dir = None
         if target_repo:
-            await websocket.send_text("[SYSTEM] Switching context to " + target_repo + "...\n")
+            await websocket.send_text(f"[SYSTEM] Context: {target_repo}\n")
             repo_slug = target_repo.replace("https://github.com/", "").replace(".git", "")
-            
-            # REVERTED: We keep the original folder name even if it has hyphens
             safe_name = repo_slug.split("/")[-1]
+            workspace_path = f"/app/workspace/{safe_name}"
             
-            workspace_path = "/app/workspace/" + safe_name
             if not os.path.exists(workspace_path):
                 os.makedirs(workspace_path, exist_ok=True)
+                await websocket.send_text("[SYSTEM] Cloning repository...\n")
                 subprocess.run(["gh", "repo", "clone", repo_slug, "."], cwd=workspace_path, check=False, env=env)
-            else:
-                subprocess.run(["git", "pull"], cwd=workspace_path, check=False, env=env)
+            
             working_dir = workspace_path
-        
-        # Construct Command based on Tool Type
-        if "mode" in target:
-            # IT IS AN AI-PRO-ARCH TOOL -> Use Environment Variables for Safety
-            env["AI_INPUT"] = user_input
-            env["AI_FILE"] = user_file
-            env["AI_MODE"] = target['mode']
-            
-            # We call the script and let it read from Env Vars or Args
-            # But to keep the PS script compatible with manual usage, we can just pass the Env Var *as* the arg value
-            ps_command = f". '{target['path']}'; ai-pro-arch -Mode $env:AI_MODE -Input $env:AI_INPUT"
-            
-            if target['mode'] == 'Fix':
-                if user_file:
-                    ps_command += " -File $env:AI_FILE"
-                if user_autopr:
-                    ps_command += " -AutoPR"
-                
-            # Clear user_input so it's not sent to stdin
-            user_input = None 
-            
-        else:
-            # LEGACY TOOL -> Use Stdin
-            ps_command = ". '" + target['path'] + "'; " + target['func']
-        
-        await websocket.send_text("[SYSTEM] Initializing " + tool_name + "...\n")
+
+        await websocket.send_text(f"[SYSTEM] Running Git-Alchemist {tool_name}...\n")
         
         process = subprocess.Popen(
-            ["pwsh", "-NoProfile", "-Command", ps_command],
-            stdin=subprocess.PIPE if user_input else None,
+            cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -178,31 +151,19 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             cwd=working_dir
         )
 
-        if user_input and process.stdin:
-            process.stdin.write(user_input + "\n")
-            process.stdin.flush()
-            process.stdin.close()
-
         for line in process.stdout:
             await websocket.send_text(line)
             
         process.wait()
-        await websocket.send_text("\n[SYSTEM] Finished with Exit Code: " + str(process.returncode))
+        await websocket.send_text(f"\n[SYSTEM] Finished (Exit Code: {process.returncode})")
         
     except WebSocketDisconnect:
         pass
     except Exception as e:
-        try:
-            await websocket.send_text("\n[ERROR] " + str(e))
-        except:
-            pass
+        await websocket.send_text(f"\n[ERROR] {str(e)}")
     finally:
         if process and process.poll() is None:
             process.terminate()
-            try:
-                process.wait(timeout=2)
-            except subprocess.TimeoutExpired:
-                process.kill()
         try:
             await websocket.close()
         except:

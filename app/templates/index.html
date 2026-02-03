@@ -74,7 +74,13 @@
 
         <div class="col-span-9 space-y-6">
             <div id="controls-area" class="p-6 bg-gray-800 rounded border border-gray-700">
-                <h2 id="tool-title" class="text-xl font-bold mb-4">Select Tool</h2>
+                <div class="flex justify-between items-start mb-4">
+                    <h2 id="tool-title" class="text-xl font-bold">Select Tool</h2>
+                    <div class="flex items-center gap-2 px-3 py-1 bg-gray-900 rounded border border-gray-700">
+                        <input type="checkbox" id="smart-mode" class="w-4 h-4 cursor-pointer">
+                        <label for="smart-mode" class="text-xs font-bold text-fuchsia-400 cursor-pointer select-none">SMART MODE</label>
+                    </div>
+                </div>
                 
                 <!-- NEW: Repo Selector Dropdown -->
                 <div id="repo-selector" class="hidden mb-4">
@@ -90,7 +96,7 @@
                 <div id="tool-inputs" class="space-y-4"></div>
                 
                 <button id="run-btn" onclick="runTool()" class="mt-4 px-8 py-3 bg-green-700 hover:bg-green-600 rounded font-bold hidden transition flex items-center gap-2">
-                    <span>Execute Script</span>
+                    <span>Execute Alchemist</span>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
                     </svg>
@@ -214,7 +220,13 @@
             ws.onopen = () => {
                 stopBtn.classList.remove('hidden');
                 
-                let payload = { input: "", file: "", repo: "", autopr: false };
+                let payload = { 
+                    input: "", 
+                    file: "", 
+                    repo: "", 
+                    autopr: false,
+                    smart: document.getElementById('smart-mode').checked
+                };
                 
                 const inputEl = document.getElementById('input-data');
                 if (inputEl) payload.input = inputEl.value;

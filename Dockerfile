@@ -19,13 +19,14 @@ RUN apt-get update && apt-get install -y \
 # Generate locales
 RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen
 
-# 2. Install PowerShell
-RUN wget -q "https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb" \
-    && dpkg -i packages-microsoft-prod.deb \
-    && apt-get update \
-    && apt-get install -y powershell gh
+# 2. Install GitHub CLI
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg 
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null 
+    && apt-get update 
+    && apt-get install gh -y
 
-# 3. Install Python Deps (Includes google-genai now)
+# 3. Install Python Dependencies
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -33,21 +34,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 4. Copy App Code
 COPY . .
 
-# 5. [CRITICAL] Install The "Shim"
-# We create a fake 'gemini' command that actually runs our Python script.
-# This tricks your existing PowerShell scripts into working with the new models.
+# 5. [LEGACY COMPAT] Create 'gemini' shim
+# Points to the new core logic if any old scripts remain
 RUN echo '#!/bin/bash' > /usr/local/bin/gemini && \
-    echo 'python3 /app/app/gemini_shim.py "$@"' >> /usr/local/bin/gemini && \
+    echo 'python3 /app/app/git_alchemist/src/core.py "$@"' >> /usr/local/bin/gemini && \
     chmod +x /usr/local/bin/gemini
-
-# 6. Verify Server Code
-RUN python -m py_compile app/server.py
-
-# 7. Optimized Compatibility Wrapper
-RUN echo '#!/bin/bash' > /usr/local/bin/cmd && \
-    echo 'if [ "$1" = "/c" ]; then shift; fi' >> /usr/local/bin/cmd && \
-    echo 'if [ $# -eq 1 ]; then exec /bin/bash -c "$1"; else exec "$@"; fi' >> /usr/local/bin/cmd && \
-    chmod +x /usr/local/bin/cmd
 
 RUN chmod +x start.sh
 
