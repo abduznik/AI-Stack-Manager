@@ -3,5 +3,6 @@ uvicorn
 jinja2
 python-multipart
 websockets
-google-genairich
+google-genai
+rich
 python-dotenv
