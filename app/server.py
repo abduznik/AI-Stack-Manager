@@ -86,7 +86,10 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
         "gen-profile": ["profile"],
         "arch-init": ["scaffold"],
         "arch-fix": ["fix"],
-        "arch-explain": ["explain"]
+        "arch-explain": ["explain"],
+        "repo-audit": ["audit"],
+        "repo-sage": ["sage"],
+        "repo-commit": ["commit"]
     }
     
     args_base = tool_map.get(tool_name)
@@ -124,6 +127,12 @@ async def websocket_endpoint(websocket: WebSocket, tool_name: str):
             cmd.append(user_input)
         elif tool_name == "arch-explain":
             cmd.append(user_input)
+        elif tool_name == "repo-sage":
+            cmd.append(user_input)
+        elif tool_name == "repo-audit":
+            if target_repo:
+                repo_name = target_repo.split("/")[-1].replace(".git", "")
+                cmd.extend(["--repo", repo_name])
         
         working_dir = None
         if target_repo:

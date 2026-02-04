@@ -5,6 +5,9 @@ from .profile_gen import generate_profile
 from .architect import scaffold_project, fix_code, explain_code
 from .repo_tools import optimize_topics, generate_descriptions
 from .issue_gen import create_issue
+from .audit import run_audit
+from .sage import ask_sage
+from .committer import suggest_commits
 
 console = Console()
 
@@ -13,10 +16,17 @@ def main():
     parser.add_argument("--smart", action="store_true", help="Use high-end Gemini Pro models (slower/lower quota)")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
-    # ... existing parser code ...
-    # (I'll keep the subparser definitions as is, just the execution logic changes)
+    # Commit Command
+    commit_parser = subparsers.add_parser("commit", help="Generate semantic commit messages from changes")
 
-    # Re-pasting the subparser block to ensure replace works correctly with context
+    # Sage Command
+    sage_parser = subparsers.add_parser("sage", help="Ask the Sage questions about your codebase")
+    sage_parser.add_argument("question", help="The question about your code")
+
+    # Audit Command
+    audit_parser = subparsers.add_parser("audit", help="Check repository 'Gold' status and metadata")
+    audit_parser.add_argument("--repo", help="Specific repository name to audit")
+
     # Profile Generator Command
     profile_parser = subparsers.add_parser("profile", help="Generate or update GitHub Profile README")
     profile_parser.add_argument("--force", action="store_true", help="Force full regeneration")
@@ -61,6 +71,12 @@ def main():
         fix_code(args.file, args.instruction, mode=mode)
     elif args.command == "explain":
         explain_code(args.context, mode=mode)
+    elif args.command == "audit":
+        run_audit(repo_name=args.repo)
+    elif args.command == "sage":
+        ask_sage(args.question, mode=mode)
+    elif args.command == "commit":
+        suggest_commits(mode=mode)
     else:
         parser.print_help()
 

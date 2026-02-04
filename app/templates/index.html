@@ -59,6 +59,20 @@
                         <div class="text-xs text-gray-500">Concept Analysis</div>
                     </button>
                 </div>
+                <div class="pt-4 border-t border-gray-700">
+                    <button onclick="selectTool('repo-audit')" class="w-full text-left p-3 rounded hover:bg-gray-800 transition border border-gray-700 focus:ring-2 ring-yellow-500 outline-none">
+                        <div class="font-bold text-yellow-400">Audit Repo</div>
+                        <div class="text-xs text-gray-500">Gold Standard Check</div>
+                    </button>
+                    <button onclick="selectTool('repo-sage')" class="w-full text-left p-3 rounded hover:bg-gray-800 transition border border-gray-700 focus:ring-2 ring-indigo-500 outline-none mt-2">
+                        <div class="font-bold text-indigo-400">Ask Sage</div>
+                        <div class="text-xs text-gray-500">Contextual Chat</div>
+                    </button>
+                    <button onclick="selectTool('repo-commit')" class="w-full text-left p-3 rounded hover:bg-gray-800 transition border border-gray-700 focus:ring-2 ring-emerald-500 outline-none mt-2">
+                        <div class="font-bold text-emerald-400">Alchemize Commit</div>
+                        <div class="text-xs text-gray-500">Semantic Suggestions</div>
+                    </button>
+                </div>
             </div>
 
             <div class="mt-8 p-4 bg-gray-800 rounded border border-gray-700">
@@ -153,6 +167,21 @@
                 title: 'Code Explanation',
                 needsRepo: true,
                 inputs: [{ type: 'textarea', id: 'input-data', placeholder: 'What concept or code do you want explained?' }]
+            },
+            'repo-audit': {
+                title: 'Repository Audit',
+                needsRepo: true,
+                inputs: []
+            },
+            'repo-sage': {
+                title: 'Consult the Sage',
+                needsRepo: true,
+                inputs: [{ type: 'textarea', id: 'input-data', placeholder: 'Ask anything about this codebase...' }]
+            },
+            'repo-commit': {
+                title: 'Alchemize Commit',
+                needsRepo: true,
+                inputs: []
             }
         };
 
